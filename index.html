@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Друк журналу</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fragment+Mono:ital@0;1&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;0,6..72,700;1,6..72,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #1c1410;
+      --ink-soft: #5a4e43;
+      --paper: #f3ead8;
+      --paper-2: #e7dcc6;
+      --rule: #c9b89a;
+      --stamp: #b42318;
+      --stamp-dark: #8a1810;
+      --ok: #2c5e3a;
+      --warn-bg: #f4e1c4;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font-family: "Newsreader", "Times New Roman", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 500px at 10% -10%, #fff6e6 0%, transparent 50%),
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 27px,
+          rgba(28, 20, 16, 0.035) 28px
+        ),
+        var(--paper);
+      min-height: 100vh;
+    }
+
+    .app-chrome { padding: 28px 28px 8px; }
+    .masthead {
+      max-width: 210mm;
+      margin: 0 auto 22px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: end;
+      border-bottom: 3px solid var(--ink);
+      padding-bottom: 14px;
+    }
+    .kicker {
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin: 0 0 6px;
+    }
+    h1 {
+      font-size: 34px;
+      line-height: 0.95;
+      margin: 0;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+    .masthead p {
+      margin: 8px 0 0;
+      color: var(--ink-soft);
+      font-size: 16px;
+    }
+    .stamp-btn {
+      appearance: none;
+      border: 2px solid var(--stamp);
+      background: transparent;
+      color: var(--stamp);
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 12px 16px;
+      cursor: pointer;
+      transform: rotate(-2deg);
+    }
+    .stamp-btn:hover { background: var(--stamp); color: var(--paper); }
+    .stamp-btn:disabled {
+      border-color: var(--rule);
+      color: var(--rule);
+      cursor: not-allowed;
+      background: transparent;
+    }
+
+    .dropzone {
+      max-width: 210mm;
+      margin: 0 auto 18px;
+      border: 1.5px dashed var(--ink);
+      background: rgba(255, 255, 255, 0.35);
+      padding: 22px 24px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+    }
+    .dropzone.dragover {
+      background: #fff;
+      box-shadow: inset 0 0 0 2px var(--ink);
+    }
+    .dropzone strong { font-size: 18px; }
+    .dropzone span {
+      display: block;
+      margin-top: 4px;
+      color: var(--ink-soft);
+      font-size: 15px;
+    }
+    .file-btn {
+      appearance: none;
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      color: var(--paper);
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 10px 14px;
+      cursor: pointer;
+    }
+    .file-btn:hover { background: transparent; color: var(--ink); }
+
+    .report {
+      max-width: 210mm;
+      margin: 0 auto 20px;
+      display: grid;
+      gap: 8px;
+    }
+    .report-item {
+      border-left: 4px solid var(--ink);
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.55);
+      font-size: 15px;
+    }
+    .report-item.ok { border-color: var(--ok); }
+    .report-item.skip {
+      border-color: var(--stamp);
+      background: var(--warn-bg);
+    }
+    .report-item code {
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 12px;
+    }
+
+    .journal-pack { margin-bottom: 8px; }
+
+    /* ——— journal pages (print) ——— */
+    @page { size: A4 portrait; margin: 0; }
+    .page {
+      width: 210mm;
+      height: 297mm;
+      padding: 10mm;
+      margin: 0 auto 20px auto;
+      background: #fff;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      page-break-after: always;
+      break-after: page;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+      color: #000;
+      font-family: "Times New Roman", Times, serif;
+    }
+    .page-content { display: flex; flex-direction: column; }
+    .header-line {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10pt;
+      margin-bottom: 4px;
+    }
+    .header-underline {
+      border-bottom: 1px solid #000;
+      font-weight: bold;
+      padding: 0 5px;
+    }
+    table.journal-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    table.journal-table th,
+    table.journal-table td {
+      border: 1px solid #000;
+      padding: 2px 1px;
+      font-size: 9.5pt;
+      text-align: center;
+      vertical-align: middle;
+      height: 23px;
+    }
+    .col-num { width: 24px; }
+    .col-name {
+      width: 160px;
+      text-align: left !important;
+      padding-left: 5px !important;
+      font-size: 9pt !important;
+    }
+    th.col-name {
+      white-space: normal;
+      overflow: visible;
+      line-height: 1.2;
+      height: 80px;
+      vertical-align: middle;
+    }
+    td.col-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .col-mark {
+      width: 11px;
+      font-size: 7pt;
+      padding: 0;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    tr.grades-row { height: 23px; }
+    tr.grades-row > td { height: 23px; max-height: 23px; overflow: hidden; }
+    td.status-span {
+      position: relative;
+      text-align: left !important;
+      padding: 0 !important;
+      overflow: hidden;
+      vertical-align: middle;
+    }
+    td.status-span .status-fit {
+      position: absolute;
+      left: 3px;
+      right: 3px;
+      top: 0;
+      bottom: 0;
+      overflow: hidden;
+      font-size: 8.5pt;
+      line-height: 1.08;
+      text-align: left;
+      word-break: break-word;
+    }
+    .vertical-th {
+      height: 80px;
+      vertical-align: bottom !important;
+      padding-bottom: 4px !important;
+    }
+    .vertical-text {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      white-space: nowrap;
+      font-size: 7pt;
+      display: inline-block;
+    }
+    .special-mark { background-color: #f0f0f0; font-weight: bold; }
+    .col-lesson-num { width: 24px; }
+    .col-lesson-date { width: 52px; font-size: 8.5pt; }
+    .col-lesson-hours { width: 32px; }
+    .col-lesson-topic {
+      text-align: left !important;
+      padding: 2px 6px !important;
+      font-size: 8.5pt;
+      line-height: 1.15;
+    }
+    .col-lesson-hw {
+      width: 135px;
+      text-align: left !important;
+      padding: 2px 5px !important;
+      font-size: 8pt;
+      line-height: 1.15;
+    }
+    .col-lesson-sign { width: 45px; }
+    .page-footer { text-align: center; font-size: 9pt; }
+
+    @media print {
+      body {
+        background: none;
+        padding: 0;
+      }
+      .app-chrome { display: none !important; }
+      .page {
+        margin: 0;
+        box-shadow: none;
+        width: 210mm;
+        height: 297mm;
+        max-height: 297mm;
+        overflow: hidden;
+        page-break-after: always;
+        break-after: page;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-chrome">
+    <header class="masthead">
+      <div>
+        <p class="kicker">Кафедральний друк · без сервера</p>
+        <h1>Журнал на папір</h1>
+        <p>CSV або Excel. Кожен аркуш — окремий предмет. Нерозпізнане не друкуємо мовчки.</p>
+      </div>
+      <button type="button" class="stamp-btn" id="print-btn" disabled>Друкувати</button>
+    </header>
+
+    <section class="dropzone" id="dropzone">
+      <div>
+        <strong>Киньте файл сюди</strong>
+        <span>xlsx / xls / csv / tsv. Кілька аркушів обійдемо по одному.</span>
+      </div>
+      <label class="file-btn">
+        Обрати файл
+        <input type="file" id="file-input" accept=".csv,.tsv,.txt,.xlsx,.xls" hidden>
+      </label>
+    </section>
+
+    <div class="report" id="report" hidden></div>
+  </div>
+
+  <div id="preview"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
