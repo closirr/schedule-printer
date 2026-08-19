@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Друк журналу</title>
+  <title>Друк журналів</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fragment+Mono:ital@0;1&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;0,6..72,700;1,6..72,400&display=swap" rel="stylesheet">
@@ -39,17 +39,43 @@
     .app-chrome { padding: 28px 28px 8px; }
     .masthead {
       max-width: 210mm;
-      margin: 0 auto 22px;
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 18px;
-      align-items: end;
+      margin: 0 auto 28px;
       border-bottom: 3px solid var(--ink);
       padding-bottom: 14px;
     }
-    .mast-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
-    .stamp-btn.ghost { border-color: var(--ink); color: var(--ink); transform: rotate(1.5deg); }
-    .stamp-btn.ghost:hover { background: var(--ink); color: var(--paper); }
+    .stage {
+      max-width: 210mm;
+      margin: 0 auto 22px;
+      padding: 18px 20px 20px;
+      border: 1.5px solid var(--ink);
+      background: rgba(255,255,255,0.4);
+    }
+    .stage[hidden] { display: none; }
+    .stage-num {
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin: 0 0 4px;
+    }
+    .stage h2 {
+      margin: 0 0 14px;
+      font-size: 22px;
+      letter-spacing: -0.02em;
+    }
+    .stage-print-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px 24px;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+    .picked-name {
+      margin: 0 0 8px;
+      font-size: 18px;
+      font-weight: 700;
+    }
     .old-way {
       max-width: 210mm;
       margin: 0 auto 14px;
@@ -58,13 +84,6 @@
     }
     .old-way summary { cursor: pointer; font-family: "Fragment Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
     .old-way p { margin: 8px 0; }
-    .pdf-status {
-      max-width: 210mm;
-      margin: 0 auto 12px;
-      min-height: 1.2em;
-      font-family: "Fragment Mono", ui-monospace, monospace;
-      font-size: 12px;
-    }
     .kicker {
       font-family: "Fragment Mono", ui-monospace, monospace;
       font-size: 11px;
@@ -156,9 +175,36 @@
     }
     .report-item.ok { border-color: var(--ok); }
     .report-item.skip {
-      border-color: var(--stamp);
-      background: var(--warn-bg);
+      border-color: #c9a227;
+      background: #f6ecc4;
     }
+    .report-item.error {
+      border-color: #b42318;
+      background: #f8d4d0;
+    }
+    .report-item.mismatch {
+      border-color: #d46b08;
+      background: #fbe4cc;
+    }
+    .warn-list {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      color: #c45a12;
+      font-size: 14px;
+    }
+    .report-item.mismatch .warn-list { color: #9a4b08; }
+    .detail-opt {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--ink-soft);
+      opacity: 0.45;
+      cursor: pointer;
+      user-select: none;
+    }
+    .detail-opt:hover { opacity: 0.9; }
     .report-item code {
       font-family: "Fragment Mono", ui-monospace, monospace;
       font-size: 12px;
@@ -229,13 +275,16 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .col-mark {
+    table.journal-table td.col-mark,
+    table.journal-table th.col-mark {
       width: 11px;
       font-size: 7pt;
       padding: 0;
       overflow: hidden;
       white-space: nowrap;
     }
+    table.journal-table td.col-mark.mark-compact { font-size: 6pt; }
+    table.journal-table td.col-mark.mark-decimal { font-size: 5pt; }
     tr.grades-row { height: 23px; }
     tr.grades-row > td { height: 23px; max-height: 23px; overflow: hidden; }
     td.status-span {
@@ -269,7 +318,9 @@
       font-size: 7pt;
       display: inline-block;
     }
-    .special-mark { background-color: #f0f0f0; font-weight: bold; }
+    .special-mark { background-color: #f0f0f0; }
+    th.special-mark { font-weight: bold; }
+    td.special-mark { font-weight: normal; }
     .col-lesson-num { width: 24px; }
     .col-lesson-date { width: 52px; font-size: 8.5pt; }
     .col-lesson-hours { width: 32px; }
@@ -288,30 +339,66 @@
     }
     .col-lesson-sign { width: 45px; }
     .page-footer { text-align: center; font-size: 9pt; }
-    .cover-page {
-      justify-content: center;
-    }
     .cover-inner {
-      padding: 28mm 12mm 0;
+      padding: 8mm 6mm 0;
+      width: 100%;
     }
-    .cover-kicker {
-      font-size: 11pt;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-      margin: 0 0 12px;
-    }
-    .cover-page h2 {
-      font-size: 28pt;
-      margin: 0 0 22px;
+    .toc-heading {
+      text-align: center;
+      font-size: 18pt;
       font-weight: bold;
+      margin: 0 0 16mm;
     }
-    .cover-list {
-      font-size: 11pt;
-      line-height: 1.55;
-      padding-left: 22px;
+    .toc-list {
+      width: 100%;
     }
-    .cover-list span { font-weight: normal; }
-    body.pdf-capture .page { margin: 0; box-shadow: none; }
+    .toc-row {
+      display: flex;
+      align-items: baseline;
+      margin: 0 0 0.55em;
+      font-size: 13pt;
+      line-height: 1.3;
+    }
+    .toc-index {
+      flex: 0 0 2.1em;
+      text-align: right;
+      padding-right: 0.55em;
+    }
+    .toc-body {
+      flex: 1;
+      display: flex;
+      align-items: baseline;
+      min-width: 0;
+    }
+    .toc-name {
+      flex: 0 1 auto;
+    }
+    .toc-lead {
+      flex: 1 1 auto;
+      border-bottom: 1px dotted #000;
+      margin: 0 8px 0.22em;
+      min-width: 12px;
+      height: 0;
+    }
+    .toc-pages {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+    .print-hint {
+      margin: 0;
+      max-width: 22rem;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--ink);
+    }
+    .print-wait {
+      margin: 8px 0 0;
+      max-width: 22rem;
+      font-size: 14px;
+      line-height: 1.4;
+      color: var(--ink-soft);
+    }
 
     @media print {
       body {
@@ -335,36 +422,48 @@
 <body>
   <div class="app-chrome">
     <header class="masthead">
-      <div>
-        <p class="kicker">Кафедральний друк · без сервера</p>
-        <h1 id="journal-title">Журнал групи</h1>
-        <p>Основне — Excel повного журналу групи. CSV одного предмета лишається як старий спосіб.</p>
-      </div>
-      <div class="mast-actions">
-        <button type="button" class="stamp-btn" id="pdf-btn" disabled>Завантажити PDF</button>
-        <button type="button" class="stamp-btn ghost" id="print-btn" disabled>Друк</button>
-      </div>
+      <h1>Друк журналів</h1>
     </header>
 
-    <section class="dropzone" id="dropzone">
-      <div>
-        <strong>Excel журналу групи</strong>
-        <span>Киньте .xlsx — кожен аркуш-предмет зберемо в один PDF.</span>
+    <section class="stage" id="stage-pick">
+      <p class="stage-num">Етап 1</p>
+      <h2>Вибір журналу групи (в форматі .xlsx)</h2>
+      <div class="dropzone" id="dropzone">
+        <div>
+          <strong>Excel повного журналу групи</strong>
+          <span>Киньте .xlsx — кожен предмет зберемо в один журнал.</span>
+        </div>
+        <label class="file-btn">
+          Обрати Excel
+          <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
+        </label>
       </div>
-      <label class="file-btn">
-        Обрати Excel
-        <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
+      <details class="old-way">
+        <summary>Старий спосіб: один CSV</summary>
+        <p>Один предмет, як раніше.</p>
+        <label class="file-btn">
+          Обрати CSV
+          <input type="file" id="csv-input" accept=".csv,.tsv,.txt" hidden>
+        </label>
+      </details>
+      <label class="detail-opt">
+        <input type="checkbox" id="detail-checks">
+        Детальні перевірки дат
       </label>
     </section>
-    <details class="old-way">
-      <summary>Старий спосіб: один CSV</summary>
-      <p>Один предмет, як раніше. Для повного журналу групи краще Excel.</p>
-      <label class="file-btn">
-        Обрати CSV
-        <input type="file" id="csv-input" accept=".csv,.tsv,.txt" hidden>
-      </label>
-    </details>
-    <p class="pdf-status" id="pdf-status"></p>
+
+    <section class="stage" id="stage-print" hidden>
+      <p class="stage-num">Етап 2</p>
+      <h2>Друк</h2>
+      <div class="stage-print-row">
+        <div>
+          <p class="picked-name" id="picked-name"></p>
+          <p class="print-hint">Використовуйте виключно Chrome, масштаб 100%, без колонтитулів і «Зберегти як PDF».</p>
+          <p class="print-wait">Збереження PDF не миттєве: прев’ю й запис файлу можуть зайняти 1–2 хвилини, зачекайте.</p>
+        </div>
+        <button type="button" class="stamp-btn" id="print-btn" disabled>Друк</button>
+      </div>
+    </section>
 
     <div class="report" id="report" hidden></div>
   </div>
@@ -372,8 +471,6 @@
   <div id="preview"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
