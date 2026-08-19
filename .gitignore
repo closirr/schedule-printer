@@ -2,3 +2,12 @@
 Thumbs.db
 journal.pdf
 screenshots/
+*.xlsx
+!Км-42.xlsx
+_peek*.py
+__pycache__/
+Scripts/
+Lib/
+Include/
+pyvenv.cfg
+*.pyc

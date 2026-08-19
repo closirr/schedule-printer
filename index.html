@@ -47,6 +47,24 @@
       border-bottom: 3px solid var(--ink);
       padding-bottom: 14px;
     }
+    .mast-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+    .stamp-btn.ghost { border-color: var(--ink); color: var(--ink); transform: rotate(1.5deg); }
+    .stamp-btn.ghost:hover { background: var(--ink); color: var(--paper); }
+    .old-way {
+      max-width: 210mm;
+      margin: 0 auto 14px;
+      font-size: 15px;
+      color: var(--ink-soft);
+    }
+    .old-way summary { cursor: pointer; font-family: "Fragment Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+    .old-way p { margin: 8px 0; }
+    .pdf-status {
+      max-width: 210mm;
+      margin: 0 auto 12px;
+      min-height: 1.2em;
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 12px;
+    }
     .kicker {
       font-family: "Fragment Mono", ui-monospace, monospace;
       font-size: 11px;
@@ -270,6 +288,30 @@
     }
     .col-lesson-sign { width: 45px; }
     .page-footer { text-align: center; font-size: 9pt; }
+    .cover-page {
+      justify-content: center;
+    }
+    .cover-inner {
+      padding: 28mm 12mm 0;
+    }
+    .cover-kicker {
+      font-size: 11pt;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      margin: 0 0 12px;
+    }
+    .cover-page h2 {
+      font-size: 28pt;
+      margin: 0 0 22px;
+      font-weight: bold;
+    }
+    .cover-list {
+      font-size: 11pt;
+      line-height: 1.55;
+      padding-left: 22px;
+    }
+    .cover-list span { font-weight: normal; }
+    body.pdf-capture .page { margin: 0; box-shadow: none; }
 
     @media print {
       body {
@@ -295,22 +337,34 @@
     <header class="masthead">
       <div>
         <p class="kicker">Кафедральний друк · без сервера</p>
-        <h1>Журнал на папір</h1>
-        <p>CSV або Excel. Кожен аркуш — окремий предмет. Нерозпізнане не друкуємо мовчки.</p>
+        <h1 id="journal-title">Журнал групи</h1>
+        <p>Основне — Excel повного журналу групи. CSV одного предмета лишається як старий спосіб.</p>
       </div>
-      <button type="button" class="stamp-btn" id="print-btn" disabled>Друкувати</button>
+      <div class="mast-actions">
+        <button type="button" class="stamp-btn" id="pdf-btn" disabled>Завантажити PDF</button>
+        <button type="button" class="stamp-btn ghost" id="print-btn" disabled>Друк</button>
+      </div>
     </header>
 
     <section class="dropzone" id="dropzone">
       <div>
-        <strong>Киньте файл сюди</strong>
-        <span>xlsx / xls / csv / tsv. Кілька аркушів обійдемо по одному.</span>
+        <strong>Excel журналу групи</strong>
+        <span>Киньте .xlsx — кожен аркуш-предмет зберемо в один PDF.</span>
       </div>
       <label class="file-btn">
-        Обрати файл
-        <input type="file" id="file-input" accept=".csv,.tsv,.txt,.xlsx,.xls" hidden>
+        Обрати Excel
+        <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
       </label>
     </section>
+    <details class="old-way">
+      <summary>Старий спосіб: один CSV</summary>
+      <p>Один предмет, як раніше. Для повного журналу групи краще Excel.</p>
+      <label class="file-btn">
+        Обрати CSV
+        <input type="file" id="csv-input" accept=".csv,.tsv,.txt" hidden>
+      </label>
+    </details>
+    <p class="pdf-status" id="pdf-status"></p>
 
     <div class="report" id="report" hidden></div>
   </div>
@@ -318,6 +372,8 @@
   <div id="preview"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
