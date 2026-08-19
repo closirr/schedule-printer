@@ -11,3 +11,7 @@ Lib/
 Include/
 pyvenv.cfg
 *.pyc
+
+# Local Netlify folder
+.netlify
+_netlify_publish/
