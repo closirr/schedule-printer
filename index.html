@@ -18,6 +18,7 @@
       --stamp-dark: #8a1810;
       --ok: #2c5e3a;
       --warn-bg: #f4e1c4;
+      --skip: #8a8378;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; }
@@ -175,8 +176,9 @@
     }
     .report-item.ok { border-color: var(--ok); }
     .report-item.skip {
-      border-color: #c9a227;
-      background: #f6ecc4;
+      border-color: var(--skip);
+      background: rgba(138, 131, 120, 0.12);
+      color: var(--ink-soft);
     }
     .report-item.error {
       border-color: #b42318;
@@ -274,17 +276,17 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      font-size: 10pt !important;
     }
     table.journal-table td.col-mark,
     table.journal-table th.col-mark {
       width: 11px;
-      font-size: 7pt;
+      font-size: 7pt !important;
       padding: 0;
       overflow: hidden;
       white-space: nowrap;
     }
-    table.journal-table td.col-mark.mark-compact { font-size: 6pt; }
-    table.journal-table td.col-mark.mark-decimal { font-size: 5pt; }
+    table.journal-table td.col-mark.mark-compact { font-size: 6pt !important; }
     tr.grades-row { height: 23px; }
     tr.grades-row > td { height: 23px; max-height: 23px; overflow: hidden; }
     td.status-span {
@@ -318,7 +320,6 @@
       font-size: 7pt;
       display: inline-block;
     }
-    .special-mark { background-color: #f0f0f0; }
     th.special-mark { font-weight: bold; }
     td.special-mark { font-weight: normal; }
     .col-lesson-num { width: 24px; }
@@ -326,17 +327,44 @@
     .col-lesson-hours { width: 32px; }
     .col-lesson-topic {
       text-align: left !important;
-      padding: 2px 6px !important;
       font-size: 8.5pt;
-      line-height: 1.15;
+      line-height: 1.12;
+    }
+    td.col-lesson-topic {
+      padding: 0 !important;
+      position: relative;
+      overflow: hidden;
+    }
+    th.col-lesson-topic {
+      padding: 2px 6px !important;
     }
     .col-lesson-hw {
       width: 135px;
       text-align: left !important;
-      padding: 2px 5px !important;
+      padding: 0 !important;
       font-size: 8pt;
-      line-height: 1.15;
+      line-height: 1.12;
+      position: relative;
+      overflow: hidden;
     }
+    tr.lesson-row { height: 23px; }
+    tr.lesson-row > td { height: 23px; max-height: 23px; overflow: hidden; }
+    tr.filler-row { height: 23px; }
+    tr.filler-row > td { height: 23px; }
+    td.col-lesson-hw .hw-fit,
+    td.col-lesson-topic .topic-fit {
+      position: absolute;
+      left: 4px;
+      right: 4px;
+      top: 0;
+      bottom: 0;
+      overflow: hidden;
+      line-height: 1.12;
+      text-align: left;
+      word-break: break-word;
+    }
+    td.col-lesson-hw .hw-fit { font-size: 8pt; }
+    td.col-lesson-topic .topic-fit { font-size: 8.5pt; }
     .col-lesson-sign { width: 45px; }
     .page-footer { text-align: center; font-size: 9pt; }
     .cover-inner {
@@ -430,8 +458,8 @@
       <h2>Вибір журналу групи (в форматі .xlsx)</h2>
       <div class="dropzone" id="dropzone">
         <div>
-          <strong>Excel повного журналу групи</strong>
-          <span>Киньте .xlsx — кожен предмет зберемо в один журнал.</span>
+          <strong>Завантажте повний журнал групи сюди</strong>
+          <span>Файл .xlsx — кожен предмет зберемо в один журнал.</span>
         </div>
         <label class="file-btn">
           Обрати Excel

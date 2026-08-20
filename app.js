@@ -2,7 +2,7 @@
   const COLS_PER_PAGE = 28;
   const ROWS_PER_PAGE = 28;
   const PAGE_START = 1;
-  const MIN_GRADE_ROWS = 22;
+  const MIN_GRADE_ROWS = 30;
 
   const MONTHS = [
     "вересень",
@@ -19,7 +19,7 @@
   const SPECIAL_MARK = ["темат", "семестр", "залік", "екзамен", "іспит", "скориг"];
   const EXAM_WORDS = ["залік", "екзамен", "іспит"];
   const SHORT_MARK_RE =
-    /^(?:н(?:[\\/]?а)?|н\/?б|нб|н\/д|н\/з|н[\\/]\d+(?:[.,]\d+)?|\d{1,2}(?:[.,]\d+)?|відм\.?|доб\.?|задов\.?)$/i;
+    /^(?:н(?:[\\/]?а)?|н\/?б|нб|н\/д|н\/з|н[\\/]\d+(?:[.,]\d+)?|\d{1,2}(?:[.,]\d+)?|\d{1,2}[\\/]\d{1,2}|відм\.?|доб\.?|задов\.?|п)$/i;
 
   const fileInput = document.getElementById("file-input");
   const csvInput = document.getElementById("csv-input");
@@ -201,7 +201,8 @@
 
   function cleanMark(val) {
     let s = stripTrailingZero(normalizeMarkText(val));
-    if (!s || /^[-–—−]+$/.test(s)) return "";
+    if (!s || /^[-–—−]+$/.test(s) || /^[!?.,…]+$/.test(s)) return "";
+    if (/^[nн]\s*[\\/]\s*$/i.test(s)) return "н";
     const nSlash = s.match(/^[nн]\s*[\\/]\s*(\d+(?:[.,]\d+)?)$/i);
     if (nSlash) return "н/" + stripTrailingZero(nSlash[1]);
     if (/^[nн]\s*[\\/]?\s*а$/i.test(s) || /^n\/?a$/i.test(s)) return "н/а";
@@ -218,6 +219,11 @@
     if (/^[nн]$/i.test(s)) return "н";
     const verbal = abbrevVerbalGrade(s);
     if (verbal) return verbal;
+    const asNum = s.replace(",", ".");
+    if (/^\d{1,2}([.]\d+)?$/.test(asNum)) {
+      const n = Number(asNum);
+      if (Number.isFinite(n)) return String(Math.round(n));
+    }
     return s;
   }
 
@@ -236,21 +242,39 @@
       .trim()
       .toLowerCase()
       .replace(/\s+/g, "");
-    return /^(н[\\/]?а|н[\\/]?д|н[\\/]?з)$/.test(t);
+    return t === "н/а" || t === "н/д" || t === "н/з";
+  }
+
+  function isSlashPairMark(val) {
+    return /^\d{1,2}[\\/]\d{1,2}$/.test(String(val || "").trim());
   }
 
   function isCompactMark(val) {
-    return isNaNdMark(val) || !!abbrevVerbalGrade(val);
+    const t = String(val || "").trim();
+    if (/^[nн]$/i.test(t)) return false;
+    return isNaNdMark(t) || isSlashPairMark(t) || !!abbrevVerbalGrade(t);
   }
 
-  function isHundredthsMark(val) {
-    return /^\d{1,2}[.,]\d{2,}$/.test(String(val || "").trim());
+  function isTransferTick(val) {
+    return /^[пp]$/i.test(String(val || "").trim());
+  }
+
+  function looksLikeTransfer(text) {
+    return fold(text).includes("перезарахув");
+  }
+
+  function normalizeStatusText(s) {
+    const raw = String(s || "").replace(/\s+/g, " ").trim();
+    if (!raw) return "";
+    if (looksLikeTransfer(raw)) return "перезараховано";
+    return raw.replace(/\s+[пp]\s*$/i, "").trim();
   }
 
   function combineStatusParts(parts) {
     const cleaned = parts
       .map((p) => String(p).replace(/\s+/g, " ").trim())
-      .filter(Boolean);
+      .filter((p) => p && !isTransferTick(p));
+    if (cleaned.some(looksLikeTransfer)) return "перезараховано";
     const kept = [];
     for (const s of cleaned) {
       if (kept.some((k) => k.includes(s))) continue;
@@ -258,7 +282,7 @@
       if (i >= 0) kept[i] = s;
       else kept.push(s);
     }
-    return kept.join(" ").replace(/\s+/g, " ").trim();
+    return normalizeStatusText(kept.join(" ").replace(/\s+/g, " ").trim());
   }
 
   function mergeSplitStatus(marks) {
@@ -269,7 +293,8 @@
       let j = i + 1;
       while (j < out.length) {
         const v = out[j];
-        if (!String(v || "").trim()) {
+        if (!String(v || "").trim() || isTransferTick(v)) {
+          if (isTransferTick(v)) out[j] = "";
           j += 1;
           continue;
         }
@@ -322,14 +347,43 @@
     return (
       t.includes("google classroom") ||
       t.includes("classroom") ||
+      t.includes("класрум") ||
       t.includes("завдання в") ||
       t.includes("домашн") ||
       t.includes("підручник") ||
       t.includes("параграф") ||
       t.startsWith("повтор") ||
-      t === "підготовка" ||
-      t.startsWith("підготовка ")
+      t.startsWith("повт ") ||
+      t === "підготовка"
     );
+  }
+
+  function findHomeworkCol(headerRow) {
+    const cells = headerRow || [];
+    for (let i = 3; i < cells.length; i++) {
+      const t = fold(cells[i]);
+      if (
+        t.includes("домашн") ||
+        t.includes("задано") ||
+        t.includes("підручник") ||
+        t === "дз"
+      ) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  function joinUniqueTexts(parts) {
+    const out = [];
+    for (const raw of parts) {
+      const t = String(raw || "").replace(/\s+/g, " ").trim();
+      if (!t) continue;
+      const frag = t.replace(/^[.,;:\-\s]+/, "").trim();
+      if (frag && out.some((x) => fold(x).includes(fold(frag)))) continue;
+      out.push(t);
+    }
+    return out.join(" ").replace(/\s+/g, " ").trim();
   }
 
   function looksLikeLooseDate(val) {
@@ -353,7 +407,7 @@
     return null;
   }
 
-  function parseTopicRow(row) {
+  function parseTopicRow(row, hwCol) {
     const cells = (row || []).map((c) =>
       String(c ?? "")
         .replace(/[\u200B-\u200D\uFEFF]/g, "")
@@ -371,57 +425,65 @@
     const date = looksLikeLooseDate(second) ? formatDateValue(second) : "";
 
     let hours = "";
-    const pending = [];
     if (isHoursValue(third)) hours = stripTrailingZero(third);
-    else if (third && !looksLikeLooseDate(third)) pending.push(third);
 
+    const pieces = [];
+    if (third && !hours && !looksLikeLooseDate(third)) {
+      pieces.push({ i: 2, t: third });
+    }
     for (let i = 3; i < cells.length; i++) {
-      if (cells[i]) pending.push(cells[i]);
+      if (cells[i]) pieces.push({ i, t: cells[i] });
     }
 
     let topic = "";
-    const hwParts = [];
-    for (const t of pending) {
-      if (looksLikeLooseDate(t) && date) continue;
-      if (!topic) {
-        if (looksLikeHwText(t) && pending.some((x) => x !== t && !looksLikeHwText(x))) {
-          hwParts.push(t);
-        } else {
-          topic = t;
+    let hw = "";
+    const knownHw = Number.isInteger(hwCol) && hwCol >= 3;
+    if (knownHw) {
+      topic = joinUniqueTexts(
+        pieces.filter((p) => p.i < hwCol).map((p) => p.t)
+      );
+      hw = joinUniqueTexts(pieces.filter((p) => p.i >= hwCol).map((p) => p.t));
+    } else {
+      const GAP = 4;
+      const TOPIC_ZONE = 8;
+      if (pieces.length && pieces[0].i >= TOPIC_ZONE) {
+        hw = joinUniqueTexts(pieces.map((p) => p.t));
+      } else if (pieces.length) {
+        const topicBits = [pieces[0].t];
+        const hwBits = [];
+        let last = pieces[0].i;
+        for (let k = 1; k < pieces.length; k++) {
+          if (pieces[k].i - last >= GAP) {
+            hwBits.push(...pieces.slice(k).map((p) => p.t));
+            break;
+          }
+          if (looksLikeHwText(pieces[k].t) && !looksLikeHwText(topicBits.join(" "))) {
+            hwBits.push(pieces[k].t);
+          } else {
+            topicBits.push(pieces[k].t);
+          }
+          last = pieces[k].i;
         }
-        continue;
+        topic = joinUniqueTexts(topicBits);
+        hw = joinUniqueTexts(hwBits);
       }
-      const frag = t.replace(/^[.,;:\-\s]+/, "").trim();
-      if (frag && fold(topic).includes(fold(frag))) continue;
-      if (/^[.,;]/.test(t)) {
-        topic = (topic.replace(/[.,;\s]+$/, "") + " " + t).replace(/\s+/g, " ").trim();
-        continue;
-      }
-      hwParts.push(t);
     }
-    let hw = hwParts.join(" ").replace(/\s+/g, " ").trim();
+
     if (!topic && hw) {
-      if (
-        looksLikeExamTopic(hw) ||
-        looksLikeConsultation(hw) ||
-        !looksLikeHwText(hw)
-      ) {
+      if (looksLikeExamTopic(hw) || looksLikeConsultation(hw)) {
         topic = hw;
         hw = "";
       }
     }
-    if (looksLikeExamTopic(hw) && !topic) {
-      topic = hw;
-      hw = "";
-    }
     if (fold(hw) && fold(topic) && fold(hw) === fold(topic)) hw = "";
-
-    if (!date && !topic && !hw) return null;
 
     const examish =
       looksLikeExamTopic(topic) ||
       looksLikeExamTopic(first) ||
       looksLikeExamTopic(second);
+    if (!examish && !topic && hw) return null;
+    if (!examish && !hours && !topic) return null;
+    if (!date && !topic && !hw) return null;
     const summary = isTeacherSummary(topic) || isTeacherSummary(cells.filter(Boolean).join(" "));
     if (summary && !examish) {
       return {
@@ -486,12 +548,16 @@
   function isLongStatus(val) {
     const s = cleanMark(val);
     if (!s) return false;
+    if (looksLikeFormattedDate(s) || isSlashPairMark(s)) return false;
+    if (/^\d{1,2}\.\d{1,2}(\.\d{2,4})?$/.test(s)) return false;
     return !SHORT_MARK_RE.test(s);
   }
 
   function firstLongStatus(marks) {
     for (let i = 0; i < marks.length; i++) {
-      if (isLongStatus(marks[i])) return { col: i, text: String(marks[i]).trim() };
+      if (isLongStatus(marks[i])) {
+        return { col: i, text: normalizeStatusText(marks[i]) };
+      }
     }
     return { col: null, text: null };
   }
@@ -507,13 +573,39 @@
     return /^\d{1,2}\.\d{1,2}(\.\d{2,4})?$/.test(s);
   }
 
+  function cleanHeaderTitle(s) {
+    return String(s || "")
+      .replace(/[\r\n\t]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function isPlausibleGradeHeader(title) {
+    const raw = cleanHeaderTitle(title);
+    if (!raw) return false;
+    if (isLessonDateTitle(raw) || isSpecialTitle(raw)) return true;
+    if (/^\d{1,3}$/.test(raw)) return false;
+    const t = fold(raw);
+    return /тест|зан|зошит|діагност|контрол|бігунок|додатков|вступн|підсумков|академ|бальна|тематич|семестр|залік|екзамен|іспит|скориг|д\/з|^кр$|^рзм$|^ткр$/.test(
+      t
+    );
+  }
+
   function isMetaSheet(name) {
     const t = fold(name);
     return (
-      t.startsWith("код") ||
+      t === "код" ||
+      t === "коди" ||
+      t.startsWith("коди ") ||
+      t.startsWith("код ") ||
       t.startsWith("звітн") ||
       t.includes("звітність") ||
-      t.includes("рейтинг")
+      t.includes("рейтинг") ||
+      t.includes("карта студент") ||
+      t.includes("титул") ||
+      t === "зміст" ||
+      t.startsWith("зміст ") ||
+      t.includes("список груп")
     );
   }
 
@@ -656,10 +748,45 @@
     return true;
   }
 
-  function collectSheetWarnings(gradeColumns, lessons) {
+  function collectSheetWarnings(gradeColumns, lessons, students) {
     const warnings = [];
     const dateCols = gradeColumns.filter((c) => isLessonDateTitle(c.title));
     const regular = lessons.filter((l) => l.type === "lesson");
+    const weirdHeaders = (gradeColumns || []).filter(
+      (c) => !isLessonDateTitle(c.title) && !isSpecialTitle(c.title)
+    );
+    const weirdShare = weirdHeaders.length / Math.max(gradeColumns.length, 1);
+    if (weirdHeaders.length >= 8 && weirdShare > 0.15) {
+      const sample = weirdHeaders[0].title;
+      warnings.push({
+        detail: false,
+        severe: true,
+        text:
+          `У шапці оцінок замість дат стоять сторонні назви (${weirdHeaders.length} кол., наприклад «${sample}»). ` +
+          `Аркуш заповнено нестандартно — перевірте Excel.`,
+      });
+    }
+
+    let dateMarks = 0;
+    let dateStatus = 0;
+    let filled = 0;
+    for (const st of students || []) {
+      if (st.statusText && looksLikeFormattedDate(st.statusText)) dateStatus += 1;
+      for (const m of st.marks || []) {
+        if (!String(m || "").trim()) continue;
+        filled += 1;
+        if (looksLikeFormattedDate(m) || /^\d{1,2}\.\d{1,2}\.\d{2,4}$/.test(String(m).trim())) {
+          dateMarks += 1;
+        }
+      }
+    }
+    if (dateStatus >= 2 || dateMarks >= 4 || (filled && dateMarks / filled > 0.08)) {
+      warnings.push({
+        detail: false,
+        severe: true,
+        text: "У клітинках оцінок знайдено дати. Ймовірно Excel сприйняв дроби на кшталт 10/5 як дату, і рядок журналу роз'їхався. Перевірте аркуш.",
+      });
+    }
     if (dateCols.length !== regular.length) {
       const dates = dateCols.length;
       const topics = regular.length;
@@ -710,7 +837,7 @@
         ok: false,
         kind: "skip",
         label,
-        reason: "службовий аркуш (коди / звітність), не журнал дисципліни",
+        reason: "службовий аркуш, не журнал дисципліни",
       };
     }
 
@@ -764,8 +891,13 @@
     const headerRow = rows[gradesHeaderIdx] || [];
     const gradeColumns = [];
     for (let colIdx = 2; colIdx < headerRow.length; colIdx++) {
-      const val = formatDateValue(headerRow[colIdx]);
-      if (val) gradeColumns.push({ colIdx, title: val });
+      const raw = cleanHeaderTitle(headerRow[colIdx]);
+      if (!raw) continue;
+      const asDate = looksLikeLooseDate(raw) ? formatDateValue(raw) : "";
+      const title =
+        asDate && isLessonDateTitle(asDate) ? asDate : raw;
+      if (!isPlausibleGradeHeader(title)) continue;
+      gradeColumns.push({ colIdx, title });
     }
     if (!gradeColumns.length) {
       return {
@@ -807,10 +939,11 @@
       };
     }
 
+    const hwCol = findHomeworkCol(rows[topicsHeaderIdx] || []);
     const lessons = [];
     let lastLessonNum = 0;
     for (let r = topicsHeaderIdx + 1; r < rows.length; r++) {
-      const parsed = parseTopicRow(rows[r] || []);
+      const parsed = parseTopicRow(rows[r] || [], hwCol);
       if (!parsed) continue;
       if (parsed.type === "lesson") {
         if (!asLessonNum(parsed.num)) {
@@ -832,7 +965,7 @@
         gradeColumns,
         students,
         lessons,
-        warnings: collectSheetWarnings(gradeColumns, lessons),
+        warnings: collectSheetWarnings(gradeColumns, lessons, students),
         sheetName: sheetMeta.name || "",
       },
     };
@@ -886,15 +1019,13 @@
           for (let cI = colPtr; cI < cEnd; cI++) {
             const val = cI < st.marks.length ? st.marks[cI] : "";
             if (isLongStatus(val)) {
-              html += statusTdHtml(val, cEnd - cI + emptyC);
+              html += statusTdHtml(normalizeStatusText(val), cEnd - cI + emptyC);
               spanned = true;
               break;
             }
             const spec = isSpecialTitle(gradeColumns[cI].title);
-            let markCls = "";
-            if (isHundredthsMark(val)) markCls = " mark-decimal";
-            else if (isCompactMark(val)) markCls = " mark-compact";
-            html += `<td class="col-mark${spec ? " special-mark" : ""}${markCls}">${escapeHtml(val)}</td>`;
+            const compact = isCompactMark(val) ? " mark-compact" : "";
+            html += `<td class="col-mark${spec ? " special-mark" : ""}${compact}">${escapeHtml(val)}</td>`;
           }
         }
         if (!spanned) {
@@ -904,16 +1035,14 @@
       }
 
       for (let extra = students.length + 1; extra <= Math.max(MIN_GRADE_ROWS, students.length); extra++) {
-        html += `<tr class="filler-row"><td class="col-num">${extra}</td><td class="col-name">&nbsp;</td>${"<td></td>".repeat(COLS_PER_PAGE)}</tr>`;
+        html += `<tr class="filler-row grades-row"><td class="col-num">${extra}</td><td class="col-name">&nbsp;</td>${'<td class="col-mark">&nbsp;</td>'.repeat(COLS_PER_PAGE)}</tr>`;
       }
 
       html += `</tbody></table></div><div class="page-footer">${pageNum}</div></div>`;
       pageNum += 1;
 
       const sLessons = spread.pageLessons;
-      const emptyL = spread.isLast
-        ? Math.max(0, ROWS_PER_PAGE - sLessons.length)
-        : 0;
+      const emptyL = Math.max(0, ROWS_PER_PAGE - sLessons.length);
 
       html += `<div class="page" data-kind="lessons">
   <div class="page-content">
@@ -929,10 +1058,16 @@
       </tr></thead><tbody>`;
 
       for (const item of sLessons) {
-        html += `<tr><td>${escapeHtml(item.num || "")}</td><td>${escapeHtml(item.date || "")}</td><td>${escapeHtml(item.hours || "")}</td><td class="col-lesson-topic">${escapeHtml(item.topic)}</td><td class="col-lesson-hw">${escapeHtml(item.hw || "")}</td><td></td></tr>`;
+        const topic = item.topic
+          ? `<div class="topic-fit">${escapeHtml(item.topic)}</div>`
+          : "";
+        const hw = item.hw
+          ? `<div class="hw-fit">${escapeHtml(item.hw)}</div>`
+          : "";
+        html += `<tr class="lesson-row"><td>${escapeHtml(item.num || "")}</td><td>${escapeHtml(item.date || "")}</td><td>${escapeHtml(item.hours || "")}</td><td class="col-lesson-topic">${topic}</td><td class="col-lesson-hw">${hw}</td><td></td></tr>`;
       }
       for (let i = 0; i < emptyL; i++) {
-        html += `<tr class="filler-row"><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+        html += `<tr class="filler-row lesson-row"><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
       }
 
       html += `</tbody></table>`;
@@ -958,8 +1093,34 @@
     });
   }
 
+  function fitClippedCells(root) {
+    root.querySelectorAll(".hw-fit, .topic-fit").forEach((el) => {
+      const start = el.classList.contains("topic-fit") ? 8.5 : 8;
+      let size = parseFloat(el.style.fontSize) || start;
+      const min = 5.5;
+      let guard = 0;
+      while (guard++ < 40 && size > min && el.scrollHeight > el.clientHeight + 0.5) {
+        size -= 0.25;
+        el.style.fontSize = size + "pt";
+      }
+      if (el.scrollHeight <= el.clientHeight + 0.5) return;
+      let text = el.textContent || "";
+      guard = 0;
+      while (guard++ < 80 && text.length > 3 && el.scrollHeight > el.clientHeight + 0.5) {
+        const cut = text.replace(/\s+\S+\s*$/, "").replace(/\s+$/, "");
+        text = cut !== text && cut.length ? cut : text.slice(0, -1);
+        el.textContent = text + "…";
+      }
+    });
+  }
+
+  function fitPrintCells(root) {
+    fitStatusCells(root);
+    fitClippedCells(root);
+  }
+
   function afterLayout() {
-    fitStatusCells(previewEl);
+    fitPrintCells(previewEl);
   }
 
   function guessGroupName(fileName, okResults) {
@@ -1031,7 +1192,10 @@
       if (!r.ok) {
         item.className =
           "report-item " + (r.kind === "skip" ? "skip" : "error");
-        item.textContent = `${r.label} не розпізнано, пропущено: ${r.reason}.`;
+        item.textContent =
+          r.kind === "skip"
+            ? `${r.label} — службовий, пропущено.`
+            : `${r.label} не розпізнано, пропущено: ${r.reason}.`;
       } else {
         const d = r.data;
         const warnings = visibleWarnings(d.warnings);
@@ -1113,14 +1277,23 @@
     }
     const v = cell.v;
     const asDate = cell.t === "d" || isDateObj(v);
+    const fmt = String(cell.z || "");
+    const fmtHasYear = /y/i.test(fmt);
+    const wNorm = w.replace(/\s/g, "");
     if (asDate) {
+      if (!fmtHasYear && /^\d{1,2}[./]\d{1,2}$/.test(wNorm)) return wNorm;
       if (w && looksLikeFormattedDate(w)) return formatDateValue(w);
       if (isDateObj(v)) return formatJsDate(v);
     }
     if (cell.t === "n" && w && looksLikeFormattedDate(w)) {
+      if (!fmtHasYear && /^\d{1,2}[./]\d{1,2}$/.test(wNorm)) return wNorm;
       return formatDateValue(w);
     }
-    if (typeof v === "number") return String(v);
+    if (typeof v === "number") {
+      const nw = w.replace(/\s/g, "").replace(",", ".");
+      if (nw && /^-?\d+([.]\d+)?$/.test(nw)) return nw;
+      return String(v);
+    }
     if (v == null || v === "") return "";
     return String(v);
   }
@@ -1166,7 +1339,7 @@
   }
 
   function openPrintView() {
-    fitStatusCells(previewEl);
+    fitPrintCells(previewEl);
     if (!previewEl.querySelector(".page")) return;
     const w = window.open("", "_blank");
     if (!w) {
@@ -1236,7 +1409,7 @@ ${styles}
   if (detailChecks) {
     detailChecks.addEventListener("change", () => renderReport(lastResults));
   }
-  window.addEventListener("beforeprint", () => fitStatusCells(previewEl));
+  window.addEventListener("beforeprint", () => fitPrintCells(previewEl));
 
   if (csvInput) {
     csvInput.addEventListener("change", () => {
