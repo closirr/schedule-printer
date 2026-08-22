@@ -1848,6 +1848,15 @@
         `<dimension ref="A1:${last}"/><sheetViews`
       );
     }
+    out = out.replace(/<sheetView\b([^>]*?)(\/?)>/, (full, attrs, self) => {
+      let a = attrs || "";
+      if (/\bshowGridLines=/.test(a)) {
+        a = a.replace(/showGridLines="[^"]*"/, 'showGridLines="0"');
+      } else {
+        a += ' showGridLines="0"';
+      }
+      return `<sheetView${a}${self}>`;
+    });
     return out;
   }
 
