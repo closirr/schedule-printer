@@ -611,6 +611,10 @@
     );
   }
 
+  function isCloneTemplateName(name) {
+    return fold(name) === "шаблон";
+  }
+
   function afterColon(s) {
     const m = String(s || "").match(/^[^:]{1,48}:\s*(.+)$/);
     return m ? m[1].trim() : "";
@@ -2004,7 +2008,7 @@
     }
     let n = 0;
     for (const s of sheets || []) {
-      if (isMetaSheet(s.name || "")) continue;
+      if (isMetaSheet(s.name || "") || isCloneTemplateName(s.name || "")) continue;
       if (!journalLayoutOf(s.rows || [])) continue;
       let discipline = "";
       let teacher = "";
@@ -2032,17 +2036,17 @@
       name,
       rows: rowsFromSheet(wb.Sheets[name]),
     }));
-    const proto = pickPrototypeName(sheets);
-    if (!proto) {
+    const protoSheet = sheets.find((s) => isCloneTemplateName(s.name || ""));
+    if (!protoSheet) {
       setMakeStatus(
-        "У файлі немає аркуша-предмета з колонкою ПІБ і таблицею тем.",
+        "У файлі немає аркуша з назвою «Шаблон». Додайте сітку журналу і назвіть цей аркуш саме Шаблон.",
         true
       );
       return;
     }
     makeState.buffer = buf;
     makeState.fileName = file.name || "шаблон.xlsx";
-    makeState.prototypeName = proto;
+    makeState.prototypeName = protoSheet.name;
     const source = (opts && opts.source) || "custom";
     fillMakeFormFromTemplate(sheets, wb, {
       skipSubjects: source === "standard",
@@ -2105,25 +2109,12 @@
     rels.forEach((r) => {
       relById[r.id] = r;
     });
-    let proto = listed.find((s) => s.name === makeState.prototypeName) || null;
-    let protoScore = Infinity;
-    for (const s of listed) {
-      if (isMetaSheet(s.name || "") || !relById[s.rId]) continue;
-      const t = String(relById[s.rId].target || "").replace(/^\/+/, "");
-      const p = t.startsWith("xl/") ? t : "xl/" + t;
-      const file = zip.file(p);
-      if (!file) continue;
-      const xml = await file.async("string");
-      const merges = Number((xml.match(/mergeCells count="(\d+)"/) || [])[1] || 0);
-      if (merges < 100) continue;
-      const score = (xml.match(/<v>/g) || []).length * 1000 + xml.length;
-      if (score < protoScore) {
-        protoScore = score;
-        proto = s;
-      }
-    }
+    const proto =
+      listed.find((s) => isCloneTemplateName(s.name || "")) || null;
     if (!proto || !relById[proto.rId]) {
-      throw new Error("Не знайдено аркуш-зразок у шаблоні.");
+      throw new Error(
+        "У файлі немає аркуша з назвою «Шаблон». Назвіть аркуш-сітку саме Шаблон."
+      );
     }
     const protoName = proto.name;
     makeState.prototypeName = protoName;
@@ -2137,15 +2128,7 @@
       .replace(/\.xml$/, ".xml.rels");
     const protoRelsFile = zip.file(protoRelsPath);
     const protoRels = protoRelsFile ? await protoRelsFile.async("string") : "";
-
-    const etalon = listed.find((s) => isHistoryEtalonName(s.name || "")) || proto;
-    if (etalon && relById[etalon.rId]) {
-      const etTarget = String(relById[etalon.rId].target || "").replace(/^\/+/, "");
-      const etPath = etTarget.startsWith("xl/") ? etTarget : "xl/" + etTarget;
-      const etXml =
-        etalon.name === protoName ? protoXml : await zip.file(etPath).async("string");
-      protoXml = trimSheetXml(protoXml, xmlSheetBounds(etXml));
-    }
+    protoXml = trimSheetXml(protoXml, xmlSheetBounds(protoXml));
 
     const xlsxWb = XLSX.read(makeState.buffer, { type: "array", cellDates: true });
     const protoSheet = xlsxWb.Sheets[protoName];
@@ -2535,13 +2518,31 @@ ${styles}
     });
   }
 
-  async function loadDefaultTemplate() {
+  async function fetchStandardTemplateBlob() {
+    const urls = [
+      "/api/template",
+      "/.netlify/functions/template",
+      DEFAULT_TEMPLATE,
+    ];
+    let lastErr = null;
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) continue;
+        const blob = await res.blob();
+        if (blob && blob.size > 800) return blob;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error("Не вдалося підвантажити стандартний шаблон.");
+  }
+
+  async function loadDefaultTemplate(force) {
     if (!document.getElementById("stage-make")) return;
-    if (makeState.source === "standard" && makeState.buffer) return;
+    if (!force && makeState.source === "standard" && makeState.buffer) return;
     try {
-      const res = await fetch(DEFAULT_TEMPLATE);
-      if (!res.ok) throw new Error("Не вдалося підвантажити стандартний шаблон.");
-      const blob = await res.blob();
+      const blob = await fetchStandardTemplateBlob();
       const file = new File(
         [blob],
         "Стандартний шаблон.xlsx",
@@ -2562,6 +2563,51 @@ ${styles}
     });
     tplCard.style.cursor = "pointer";
   }
+
+  const tplAdminSave = document.getElementById("tpl-admin-save");
+  if (tplAdminSave) {
+    tplAdminSave.addEventListener("click", async () => {
+      const status = document.getElementById("tpl-admin-status");
+      const keyEl = document.getElementById("tpl-admin-key");
+      const fileEl = document.getElementById("tpl-admin-file");
+      const file = fileEl && fileEl.files && fileEl.files[0];
+      const key = String((keyEl && keyEl.value) || "");
+      const say = (t, err) => {
+        if (!status) return;
+        status.textContent = t;
+        status.className = err ? "err" : "";
+      };
+      if (!file) {
+        say("Оберіть Excel-файл.", true);
+        return;
+      }
+      if (!key) {
+        say("Введіть пароль адміністратора.", true);
+        return;
+      }
+      try {
+        await handleMakeTemplate(file, { source: "custom" });
+        if (!makeState.buffer) return;
+        say("Зберігаю на сайті…");
+        const res = await fetch("/api/template", {
+          method: "PUT",
+          headers: { "x-admin-key": key },
+          body: makeState.buffer,
+        });
+        const text = await res.text();
+        if (!res.ok) {
+          say(text || "Не вдалося зберегти.", true);
+          return;
+        }
+        say("Стандартний шаблон оновлено для всіх.");
+        makeState.source = "";
+        await loadDefaultTemplate(true);
+      } catch (err) {
+        say(err && err.message ? err.message : String(err), true);
+      }
+    });
+  }
+
   loadDefaultTemplate();
 
   async function tryAutoload() {
