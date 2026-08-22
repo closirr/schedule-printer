@@ -203,22 +203,20 @@
       text-transform: uppercase;
     }
     .old-way p { margin: 8px 0; }
-    .admin-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-      margin: 10px 0 0;
+    .solid-btn {
+      appearance: none;
+      border: 1.5px solid var(--ink);
+      background: var(--ink);
+      color: var(--paper);
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 11px 16px;
+      cursor: pointer;
     }
-    .admin-row input[type="password"] {
-      border: 1px solid var(--ink);
-      background: rgba(255,255,255,0.7);
-      color: var(--ink);
-      font: inherit;
-      font-size: 15px;
-      padding: 7px 8px;
-      min-width: 12rem;
-    }
+    .solid-btn:hover { background: transparent; color: var(--ink); }
+    .solid-btn:active { transform: translateY(1px); }
     #tpl-admin-status { margin: 8px 0 0; font-size: 14px; }
     #tpl-admin-status.err { color: var(--stamp-dark); }
     .make-grid {
@@ -340,20 +338,12 @@
         </div>
       </div>
       <div class="tpl-extra">
-        <label class="text-btn" for="make-input">Завантажити свій шаблон</label>
+        <button type="button" class="solid-btn" id="tpl-make-main">Зробити шаблон основним</button>
+        <label class="text-btn" for="make-input">Завантажити лише для себе</label>
         <input type="file" id="make-input" accept=".xlsx,.xls" hidden>
+        <input id="tpl-admin-file" type="file" accept=".xlsx,.xls" hidden>
       </div>
-      <details class="old-way">
-        <summary>Замінити стандартний шаблон на сайті</summary>
-        <p>Новий файл стане стандартним для всіх, без повторного заливу сайту. У файлі має бути аркуш «Шаблон». Потрібен пароль адміністратора.</p>
-        <div class="admin-row">
-          <input id="tpl-admin-key" type="password" autocomplete="current-password" placeholder="Пароль">
-          <label class="text-btn" for="tpl-admin-file">Обрати .xlsx</label>
-          <input id="tpl-admin-file" type="file" accept=".xlsx,.xls" hidden>
-          <button type="button" class="text-btn" id="tpl-admin-save">Зберегти на сайті</button>
-        </div>
-        <p id="tpl-admin-status"></p>
-      </details>
+      <p id="tpl-admin-status"></p>
       <div class="tpl-zoom" id="tpl-zoom" hidden>
         <img src="template-preview.png" alt="Аркуш журналу: оцінки і відвідування, збільшено">
       </div>

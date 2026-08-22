@@ -15,11 +15,6 @@ export default async (req, context) => {
       });
     }
     if (req.method === "PUT" || req.method === "POST") {
-      const secret = process.env.TEMPLATE_ADMIN_KEY || "";
-      const given = req.headers.get("x-admin-key") || "";
-      if (!secret || given !== secret) {
-        return new Response("Невірний пароль.", { status: 403 });
-      }
       const buf = Buffer.from(await req.arrayBuffer());
       if (buf.length < 800) {
         return new Response("Файл замалий.", { status: 400 });

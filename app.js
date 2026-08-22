@@ -2564,47 +2564,46 @@ ${styles}
     tplCard.style.cursor = "pointer";
   }
 
-  const tplAdminSave = document.getElementById("tpl-admin-save");
-  if (tplAdminSave) {
-    tplAdminSave.addEventListener("click", async () => {
-      const status = document.getElementById("tpl-admin-status");
-      const keyEl = document.getElementById("tpl-admin-key");
-      const fileEl = document.getElementById("tpl-admin-file");
-      const file = fileEl && fileEl.files && fileEl.files[0];
-      const key = String((keyEl && keyEl.value) || "");
-      const say = (t, err) => {
-        if (!status) return;
-        status.textContent = t;
-        status.className = err ? "err" : "";
-      };
-      if (!file) {
-        say("Оберіть Excel-файл.", true);
+  async function publishStandardTemplate(file) {
+    const status = document.getElementById("tpl-admin-status");
+    const say = (t, err) => {
+      if (!status) return;
+      status.textContent = t;
+      status.className = err ? "err" : "";
+    };
+    if (!file) {
+      say("Оберіть Excel-файл з аркушем «Шаблон».", true);
+      return;
+    }
+    try {
+      await handleMakeTemplate(file, { source: "custom" });
+      if (!makeState.buffer) return;
+      say("Зберігаю як основний…");
+      const res = await fetch("/api/template", {
+        method: "PUT",
+        body: makeState.buffer,
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        say(text || "Не вдалося зберегти.", true);
         return;
       }
-      if (!key) {
-        say("Введіть пароль адміністратора.", true);
-        return;
-      }
-      try {
-        await handleMakeTemplate(file, { source: "custom" });
-        if (!makeState.buffer) return;
-        say("Зберігаю на сайті…");
-        const res = await fetch("/api/template", {
-          method: "PUT",
-          headers: { "x-admin-key": key },
-          body: makeState.buffer,
-        });
-        const text = await res.text();
-        if (!res.ok) {
-          say(text || "Не вдалося зберегти.", true);
-          return;
-        }
-        say("Стандартний шаблон оновлено для всіх.");
-        makeState.source = "";
-        await loadDefaultTemplate(true);
-      } catch (err) {
-        say(err && err.message ? err.message : String(err), true);
-      }
+      say("Цей файл тепер основний шаблон для всіх.");
+      makeState.source = "";
+      await loadDefaultTemplate(true);
+    } catch (err) {
+      say(err && err.message ? err.message : String(err), true);
+    }
+  }
+
+  const tplMakeMain = document.getElementById("tpl-make-main");
+  const tplAdminFile = document.getElementById("tpl-admin-file");
+  if (tplMakeMain && tplAdminFile) {
+    tplMakeMain.addEventListener("click", () => tplAdminFile.click());
+    tplAdminFile.addEventListener("change", () => {
+      const file = tplAdminFile.files && tplAdminFile.files[0];
+      if (file) publishStandardTemplate(file);
+      tplAdminFile.value = "";
     });
   }
 
