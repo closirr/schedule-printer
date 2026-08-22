@@ -1482,6 +1482,7 @@
 
   function xmlEscape(s) {
     return String(s ?? "")
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
@@ -1496,20 +1497,52 @@
       .replace(/&amp;/g, "&");
   }
 
-  function setSheetCellXml(xml, addr, text) {
-    const val = xmlEscape(text);
-    const re = new RegExp(
-      `<c([^>]*\\br="${addr}"(?![A-Z0-9])[^>]*)>([\\s\\S]*?)</c>`
-    );
-    const next = `<c r="${addr}" t="str"><v>${val}</v></c>`;
-    if (re.test(xml)) {
-      return xml.replace(re, (full, attrs) => {
-        const style = (attrs.match(/\bs="[^"]*"/) || [""])[0];
-        return style
-          ? `<c r="${addr}" ${style} t="str"><v>${val}</v></c>`
-          : next;
-      });
+  function createSharedStrings(xml) {
+    if (!xml) {
+      return { exists: false, add() { return null; }, serialize() { return ""; } };
     }
+    let sst = xml;
+    let siCount = (sst.match(/<si\b/g) || []).length;
+    return {
+      exists: true,
+      add(text) {
+        const t = String(text ?? "");
+        const body =
+          /^\s|\s$/.test(t)
+            ? `<t xml:space="preserve">${xmlEscape(t)}</t>`
+            : `<t>${xmlEscape(t)}</t>`;
+        sst = sst.replace("</sst>", `<si>${body}</si></sst>`);
+        const idx = siCount;
+        siCount += 1;
+        sst = sst
+          .replace(/\bcount="\d+"/, `count="${siCount}"`)
+          .replace(/\buniqueCount="\d+"/, `uniqueCount="${siCount}"`);
+        return idx;
+      },
+      serialize() {
+        return sst;
+      },
+    };
+  }
+
+  function makePatchedCell(addr, text, attrs, sst) {
+    const style = ((attrs || "").match(/\bs="[^"]*"/) || [""])[0];
+    const styleBit = style ? " " + style : "";
+    if (sst && sst.exists) {
+      const idx = sst.add(text);
+      return `<c r="${addr}"${styleBit} t="s"><v>${idx}</v></c>`;
+    }
+    return `<c r="${addr}"${styleBit} t="inlineStr"><is><t xml:space="preserve">${xmlEscape(text)}</t></is></c>`;
+  }
+
+  function setSheetCellXml(xml, addr, text, sst) {
+    const re = new RegExp(
+      `<c([^>]*\\br="${addr}"(?![A-Z0-9])[^>]*)(\/>|>[\\s\\S]*?</c>)`
+    );
+    if (re.test(xml)) {
+      return xml.replace(re, (full, attrs) => makePatchedCell(addr, text, attrs, sst));
+    }
+    const next = makePatchedCell(addr, text, "", sst);
     const rowNum = String(addr).replace(/^[A-Z]+/i, "");
     const rowRe = new RegExp(`(<row[^>]*\\br="${rowNum}"(?![0-9])[^>]*>)`);
     if (rowRe.test(xml)) return xml.replace(rowRe, `$1${next}`);
@@ -1517,6 +1550,79 @@
       "</sheetData>",
       `<row r="${rowNum}">${next}</row></sheetData>`
     );
+  }
+
+  function zipNormalize(p) {
+    const stack = [];
+    for (const seg of String(p || "").replace(/\\/g, "/").split("/")) {
+      if (!seg || seg === ".") continue;
+      if (seg === "..") stack.pop();
+      else stack.push(seg);
+    }
+    return stack.join("/");
+  }
+
+  function zipDir(p) {
+    return String(p || "").replace(/\/[^/]+$/, "");
+  }
+
+  function resolveRelTarget(partPath, target) {
+    const t = String(target || "").replace(/^\/+/, "");
+    if (/^[a-z][a-z0-9+.-]*:/i.test(t)) return t;
+    return zipNormalize(zipDir(partPath) + "/" + t);
+  }
+
+  function relTargetFrom(partPath, absPath) {
+    const from = zipDir(partPath).split("/").filter(Boolean);
+    const to = String(absPath).split("/").filter(Boolean);
+    let i = 0;
+    while (i < from.length && i < to.length && from[i] === to[i]) i += 1;
+    return from.slice(i).map(() => "..").concat(to.slice(i)).join("/");
+  }
+
+  function serializeRels(rels) {
+    return (
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+      (rels || [])
+        .map((r) => {
+          const mode = r.mode ? ` TargetMode="${xmlEscape(r.mode)}"` : "";
+          return `<Relationship Id="${xmlEscape(r.id)}" Type="${xmlEscape(r.type)}" Target="${xmlEscape(r.target)}"${mode}/>`;
+        })
+        .join("") +
+      `</Relationships>`
+    );
+  }
+
+  function clonePartPath(srcAbs, stamp) {
+    const m = String(srcAbs).match(/^(.*)\/([^/]+)\.([^.]+)$/);
+    if (!m) return srcAbs + "_g" + stamp;
+    return `${m[1]}/${m[2]}_g${stamp}.${m[3]}`;
+  }
+
+  async function remapSheetRels(zip, out, relsXml, srcPartPath, destPartPath, stamp) {
+    if (!relsXml) return "";
+    const next = [];
+    for (const r of parseXmlRels(relsXml)) {
+      if (r.mode === "External" || /^[a-z][a-z0-9+.-]*:/i.test(r.target || "")) {
+        next.push(r);
+        continue;
+      }
+      const srcAbs = resolveRelTarget(srcPartPath, r.target);
+      const destAbs = clonePartPath(srcAbs, stamp);
+      const srcFile = zip.file(srcAbs);
+      if (srcFile && !out.file(destAbs)) {
+        out.file(destAbs, await srcFile.async("uint8array"));
+      }
+      const srcRels = zipDir(srcAbs) + "/_rels/" + srcAbs.split("/").pop() + ".rels";
+      const destRels = zipDir(destAbs) + "/_rels/" + destAbs.split("/").pop() + ".rels";
+      const rf = zip.file(srcRels);
+      if (rf && !out.file(destRels)) {
+        out.file(destRels, await rf.async("uint8array"));
+      }
+      next.push({ ...r, target: relTargetFrom(destPartPath, destAbs) });
+    }
+    return serializeRels(next);
   }
 
   function attrOf(tag, name) {
@@ -1883,6 +1989,11 @@
       else front.push(s);
     });
 
+    const sstFile = zip.file("xl/sharedStrings.xml");
+    const sst = createSharedStrings(
+      sstFile ? await sstFile.async("string") : ""
+    );
+
     const usedNames = new Set();
     const outSheets = [];
     const copyKept = async (src) => {
@@ -1898,18 +2009,22 @@
         name: uniqueSheetName(src.name, usedNames),
         xml,
         rels: rf ? await rf.async("string") : "",
+        srcPart: path,
+        cloneRels: false,
         patchTitle: fold(src.name || "").includes("титул"),
       });
     };
     for (const s of front) await copyKept(s);
     for (const sub of subjects) {
       let xml = protoXml;
-      xml = setSheetCellXml(xml, discAddr, sub.subject);
-      xml = setSheetCellXml(xml, teachAddr, sub.teacher || "");
+      xml = setSheetCellXml(xml, discAddr, sub.subject, sst);
+      xml = setSheetCellXml(xml, teachAddr, sub.teacher || "", sst);
       outSheets.push({
         name: uniqueSheetName(sub.subject, usedNames),
         xml,
         rels: protoRels,
+        srcPart: protoPath,
+        cloneRels: true,
         patchTitle: false,
       });
     }
@@ -1921,33 +2036,36 @@
       const addrs = makeState.titleAddrs || {};
       const raw = makeState.titleRaw || {};
       if (addrs.group && meta.group) {
-        xml = setSheetCellXml(xml, addrs.group, meta.group);
+        xml = setSheetCellXml(xml, addrs.group, meta.group, sst);
       }
       if (addrs.department && meta.department) {
         xml = setSheetCellXml(
           xml,
           addrs.department,
-          rewriteLabeledCell(raw.department, meta.department, "Відділення")
+          rewriteLabeledCell(raw.department, meta.department, "Відділення"),
+          sst
         );
       }
       if (addrs.course && meta.course) {
         xml = setSheetCellXml(
           xml,
           addrs.course,
-          rewriteLabeledCell(raw.course, meta.course, "Курс")
+          rewriteLabeledCell(raw.course, meta.course, "Курс"),
+          sst
         );
       }
       if (addrs.specialty && meta.specialty) {
         xml = setSheetCellXml(
           xml,
           addrs.specialty,
-          rewriteLabeledCell(raw.specialty, meta.specialty, "Спеціальність")
+          rewriteLabeledCell(raw.specialty, meta.specialty, "Спеціальність"),
+          sst
         );
       }
       if (addrs.period && meta.period) {
         const p = String(meta.period).trim();
         const periodText = /^на\s+/i.test(p) ? p : "на " + p;
-        xml = setSheetCellXml(xml, addrs.period, periodText);
+        xml = setSheetCellXml(xml, addrs.period, periodText, sst);
       }
       outSheets[titleIdx].xml = xml;
     }
@@ -1968,22 +2086,35 @@
       if (/calcChain/i.test(path)) continue;
       out.file(path, await f.async("uint8array"));
     }
+    if (sst.exists) out.file("xl/sharedStrings.xml", sst.serialize());
 
     const sheetRels = [];
     const otherRels = rels.filter(
       (r) => !/\/relationships\/worksheet$/.test(r.type) && !/calcChain/i.test(r.target || "")
     );
-    outSheets.forEach((s, i) => {
+    for (let i = 0; i < outSheets.length; i++) {
+      const s = outSheets[i];
       const n = i + 1;
       const sheetPath = `xl/worksheets/sheet${n}.xml`;
       out.file(sheetPath, s.xml);
-      if (s.rels) out.file(`xl/worksheets/_rels/sheet${n}.xml.rels`, s.rels);
+      let relsXml = s.rels || "";
+      if (relsXml && s.cloneRels) {
+        relsXml = await remapSheetRels(
+          zip,
+          out,
+          relsXml,
+          s.srcPart,
+          sheetPath,
+          n
+        );
+      }
+      if (relsXml) out.file(`xl/worksheets/_rels/sheet${n}.xml.rels`, relsXml);
       sheetRels.push({
         id: "rId" + n,
         type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
         target: `worksheets/sheet${n}.xml`,
       });
-    });
+    }
     const wbRels = sheetRels.concat(
       otherRels.map((r, i) => ({
         id: "rId" + (sheetRels.length + i + 1),
@@ -1992,17 +2123,7 @@
         mode: r.mode,
       }))
     );
-    const relsOut =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
-      wbRels
-        .map((r) => {
-          const mode = r.mode ? ` TargetMode="${xmlEscape(r.mode)}"` : "";
-          return `<Relationship Id="${r.id}" Type="${xmlEscape(r.type)}" Target="${xmlEscape(r.target)}"${mode}/>`;
-        })
-        .join("") +
-      `</Relationships>`;
-    out.file("xl/_rels/workbook.xml.rels", relsOut);
+    out.file("xl/_rels/workbook.xml.rels", serializeRels(wbRels));
 
     const sheetsXml = outSheets
       .map(
@@ -2011,20 +2132,32 @@
       )
       .join("");
     let newWb = wbXml
-      .replace(/<sheets>[\s\S]*?<\/sheets>/, `<sheets>${sheetsXml}</sheets>`)
-      .replace(/<definedNames>[\s\S]*?<\/definedNames>/, "");
+      .replace(/<sheets\b[^>]*>[\s\S]*?<\/sheets>/, `<sheets>${sheetsXml}</sheets>`)
+      .replace(/<definedNames\b[^>]*\/>/g, "")
+      .replace(/<definedNames\b[^>]*>[\s\S]*?<\/definedNames>/g, "")
+      .replace(/<calcPr\b[^>]*\/>/g, "")
+      .replace(/<calcPr\b[^>]*>[\s\S]*?<\/calcPr>/g, "");
     out.file("xl/workbook.xml", newWb);
 
-    let newTypes = typesXml.replace(
-      /<Override PartName="\/xl\/worksheets\/sheet\d+\.xml"[^>]*\/>/g,
-      ""
-    );
-    const overrides = outSheets
+    let newTypes = typesXml.replace(/<Override\b[^>]*\/>/g, (tag) => {
+      const part = (tag.match(/PartName="([^"]+)"/) || [])[1] || "";
+      return /^\/xl\/worksheets\/sheet\d+\.xml$/i.test(part) ? "" : tag;
+    });
+    const extraDraw = Object.keys(out.files)
+      .filter((p) => /xl\/drawings\/[^/]*_g\d+\.xml$/i.test(p))
       .map(
-        (_, i) =>
-          `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`
+        (p) =>
+          `<Override PartName="/${p.replace(/^\/+/, "")}" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`
       )
       .join("");
+    const overrides =
+      extraDraw +
+      outSheets
+        .map(
+          (_, i) =>
+            `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`
+        )
+        .join("");
     if (newTypes.includes("<Override")) {
       newTypes = newTypes.replace("<Override", overrides + "<Override");
     } else {
@@ -2054,6 +2187,9 @@
       type: "blob",
       mimeType:
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+      platform: "DOS",
     });
   }
 
