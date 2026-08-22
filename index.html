@@ -371,6 +371,81 @@
       padding: 8mm 6mm 0;
       width: 100%;
     }
+    .page.title-page .page-content {
+      flex: 1;
+      min-height: 0;
+    }
+    .title-content {
+      height: 100%;
+    }
+    .title-frame {
+      height: 100%;
+      border: 2.6pt double #000;
+      padding: 4.5mm;
+      display: flex;
+    }
+    .title-inner {
+      flex: 1;
+      border: 0.7pt solid #000;
+      padding: 16mm 14mm 12mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .title-college {
+      font-size: 13.5pt;
+      font-weight: bold;
+      line-height: 1.4;
+      letter-spacing: 0.01em;
+      max-width: 160mm;
+    }
+    .title-college div { margin: 0 0 0.15em; }
+    .title-word {
+      margin: 22mm 0 7mm;
+      font-size: 32pt;
+      font-weight: bold;
+      letter-spacing: 0.42em;
+      padding-left: 0.42em;
+    }
+    .title-sub {
+      font-size: 14pt;
+      line-height: 1.35;
+      max-width: 140mm;
+    }
+    .title-fields {
+      width: 78%;
+      margin-top: 18mm;
+      text-align: left;
+    }
+    .title-field {
+      display: flex;
+      align-items: baseline;
+      margin: 0 0 9px;
+      font-size: 13pt;
+      line-height: 1.3;
+    }
+    .title-field-label {
+      flex: 0 0 auto;
+      padding-right: 8px;
+    }
+    .title-field-rule {
+      flex: 1 1 auto;
+      border-bottom: 1px solid #000;
+      min-width: 16px;
+      height: 0;
+      margin: 0 8px 0.18em;
+    }
+    .title-field-value {
+      flex: 0 0 auto;
+      font-weight: bold;
+    }
+    .title-period {
+      margin-top: auto;
+      padding-top: 16mm;
+      font-size: 14.5pt;
+      font-weight: bold;
+    }
     .toc-heading {
       text-align: center;
       font-size: 18pt;
@@ -427,6 +502,94 @@
       line-height: 1.4;
       color: var(--ink-soft);
     }
+    .make-lead {
+      margin: 0 0 14px;
+      color: var(--ink-soft);
+      font-size: 15px;
+      line-height: 1.4;
+    }
+    .make-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 14px;
+      margin: 0 0 16px;
+    }
+    .make-field label,
+    .subj-head {
+      display: block;
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin: 0 0 4px;
+    }
+    .make-field input,
+    .subj-row input,
+    .make-paste {
+      width: 100%;
+      border: 1px solid var(--ink);
+      background: rgba(255,255,255,0.7);
+      color: var(--ink);
+      font: inherit;
+      font-size: 15px;
+      padding: 7px 8px;
+    }
+    .make-paste {
+      min-height: 72px;
+      resize: vertical;
+      margin: 0 0 8px;
+    }
+    .subj-list { display: grid; gap: 6px; margin: 0 0 10px; }
+    .subj-row {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .subj-remove {
+      appearance: none;
+      border: 1px solid var(--ink-soft);
+      background: transparent;
+      color: var(--ink-soft);
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+    .subj-remove:hover { border-color: var(--stamp); color: var(--stamp); }
+    .make-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin: 12px 0 8px;
+    }
+    .text-btn {
+      appearance: none;
+      border: 0;
+      background: none;
+      color: var(--ink-soft);
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      padding: 0;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    #make-status {
+      margin: 8px 0 0;
+      font-size: 14px;
+      color: var(--ink-soft);
+    }
+    #make-status.err { color: var(--stamp-dark); }
+    @media (max-width: 720px) {
+      .make-grid, .subj-row { grid-template-columns: 1fr; }
+    }
 
     @media print {
       body {
@@ -434,6 +597,7 @@
         padding: 0;
       }
       .app-chrome { display: none !important; }
+      .journal-pack { margin: 0; }
       .page {
         margin: 0;
         box-shadow: none;
@@ -444,6 +608,10 @@
         page-break-after: always;
         break-after: page;
       }
+      .journal-pack:last-child .page:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
     }
   </style>
 </head>
@@ -451,6 +619,7 @@
   <div class="app-chrome">
     <header class="masthead">
       <h1>Друк журналів</h1>
+      <p>Друкувати готовий журнал або зібрати новий Excel з шаблону.</p>
     </header>
 
     <section class="stage" id="stage-pick">
@@ -494,11 +663,61 @@
     </section>
 
     <div class="report" id="report" hidden></div>
+
+    <section class="stage" id="stage-make">
+      <p class="stage-num">Зібрати журнал</p>
+      <h2>Новий Excel з шаблону</h2>
+      <p class="make-lead">Завантажте шаблон електронного журналу, вкажіть предмети й викладачів. Кожен предмет стане окремим аркушем з тією самою розміткою, що й порожня «Всесвітня історія».</p>
+      <div class="dropzone" id="make-drop">
+        <div>
+          <strong>Шаблон .xlsx</strong>
+          <span id="make-picked">Потрібен файл з аркушем-предметом (сітка студентів і тем).</span>
+        </div>
+        <label class="file-btn">
+          Обрати шаблон
+          <input type="file" id="make-input" accept=".xlsx,.xls" hidden>
+        </label>
+      </div>
+      <div id="make-form" hidden>
+        <div class="make-grid">
+          <div class="make-field">
+            <label for="make-group">Група</label>
+            <input id="make-group" type="text" autocomplete="off">
+          </div>
+          <div class="make-field">
+            <label for="make-course">Курс</label>
+            <input id="make-course" type="text" autocomplete="off">
+          </div>
+          <div class="make-field">
+            <label for="make-dept">Відділення</label>
+            <input id="make-dept" type="text" autocomplete="off">
+          </div>
+          <div class="make-field">
+            <label for="make-spec">Спеціальність</label>
+            <input id="make-spec" type="text" autocomplete="off">
+          </div>
+          <div class="make-field" style="grid-column: 1 / -1;">
+            <label for="make-period">Семестр / навчальний рік</label>
+            <input id="make-period" type="text" autocomplete="off">
+          </div>
+        </div>
+        <p class="subj-head">Предмети</p>
+        <div class="subj-list" id="subj-list"></div>
+        <textarea class="make-paste" id="subj-paste" placeholder="Або вставте список, по рядку: Українська мова — Петренко О.І."></textarea>
+        <div class="make-actions">
+          <button type="button" class="text-btn" id="subj-add">Додати предмет</button>
+          <button type="button" class="text-btn" id="subj-from-paste">Підставити зі списку</button>
+          <button type="button" class="stamp-btn" id="make-btn">Завантажити Excel</button>
+        </div>
+        <p id="make-status"></p>
+      </div>
+    </section>
   </div>
 
   <div id="preview"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

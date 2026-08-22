@@ -605,8 +605,93 @@
       t.includes("титул") ||
       t === "зміст" ||
       t.startsWith("зміст ") ||
-      t.includes("список груп")
+      t.includes("список груп") ||
+      t.includes("зведен") ||
+      t.includes("відомість")
     );
+  }
+
+  function afterColon(s) {
+    const m = String(s || "").match(/^[^:]{1,48}:\s*(.+)$/);
+    return m ? m[1].trim() : "";
+  }
+
+  function looksLikeGroupCode(s) {
+    const t = String(s || "").replace(/\s+/g, "");
+    return /^[A-Za-zА-Яа-яІіЇїЄєҐґ]{1,8}[-–]?\d{1,3}[A-Za-zА-Яа-яІіЇїЄєҐґ]{0,3}$/.test(
+      t
+    );
+  }
+
+  function parseTitlePage(rows) {
+    const cells = [];
+    for (const row of rows || []) {
+      for (const c of row || []) {
+        const t = String(c || "")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (t) cells.push(t);
+      }
+    }
+    const collegeParts = [];
+    let journalTitle = "";
+    let subtitle = "";
+    let department = "";
+    let group = "";
+    let period = "";
+    let course = "";
+    let specialty = "";
+    for (const t of cells) {
+      const f = fold(t);
+      if (f === "журнал" || f.startsWith("журнал ")) {
+        journalTitle = t.toUpperCase() === t ? t : "ЖУРНАЛ";
+        continue;
+      }
+      if (f.includes("обліку роботи")) {
+        subtitle = t.replace(/\s+/g, " ").trim();
+        continue;
+      }
+      if (f.includes("відділен") || f.includes("віділен")) {
+        department = afterColon(t) || t;
+        continue;
+      }
+      if (/^курс\b/.test(f) || f.startsWith("курс:")) {
+        course = afterColon(t) || t.replace(/^курс:?\s*/i, "").trim();
+        continue;
+      }
+      if (f.includes("спеціальн")) {
+        specialty = afterColon(t);
+        continue;
+      }
+      if (f.includes("семестр") || /\bн\.?\s*р\.?\b/i.test(t)) {
+        period = t.replace(/^на\s+/i, "").trim();
+        continue;
+      }
+      if (f.startsWith("груп")) {
+        group = afterColon(t) || group;
+        continue;
+      }
+      if (!journalTitle && t.length > 18) {
+        collegeParts.push(t);
+        continue;
+      }
+      if (!group && looksLikeGroupCode(t)) group = t;
+    }
+    return {
+      college: collegeParts.join(" ").replace(/\s+/g, " ").trim(),
+      collegeLines: collegeParts,
+      journalTitle: journalTitle || "ЖУРНАЛ",
+      subtitle,
+      department,
+      group,
+      period,
+      course,
+      specialty,
+    };
+  }
+
+  function titlePageUseful(title) {
+    return !!(title && (title.college || title.group || title.period));
   }
 
   function buildSpreads(gradeColumns, lessons) {
@@ -837,7 +922,7 @@
         ok: false,
         kind: "skip",
         label,
-        reason: "службовий аркуш, не журнал дисципліни",
+        reason: "службовий, пропущено",
       };
     }
 
@@ -900,6 +985,19 @@
       gradeColumns.push({ colIdx, title });
     }
     if (!gradeColumns.length) {
+      let named = 0;
+      for (let r = gradesHeaderIdx + 1; r < topicsHeaderIdx; r++) {
+        const name = shortenName(String((rows[r] || [])[1] || "").replace(/\/\d+$/, ""));
+        if (name) named += 1;
+      }
+      if (!named) {
+        return {
+          ok: false,
+          kind: "skip",
+          label,
+          reason: "порожній шаблон, пропущено",
+        };
+      }
       return {
         ok: false,
         kind: "error",
@@ -915,7 +1013,7 @@
       const num =
         asLessonNum(row[0]) || String(row[0] || "").trim().replace(/\.+$/, "");
       const name = shortenName(String(row[1] || "").replace(/\/\d+$/, ""));
-      if (!name && !num) continue;
+      if (!name) continue;
       const marks = mergeSplitStatus(
         gradeColumns.map((c) =>
           c.colIdx < row.length ? cleanMark(row[c.colIdx]) : ""
@@ -933,9 +1031,9 @@
     if (!students.length) {
       return {
         ok: false,
-        kind: "error",
+        kind: "skip",
         label,
-        reason: "таблицю студентів знайдено, але рядків студентів немає",
+        reason: "порожній шаблон, пропущено",
       };
     }
 
@@ -1123,7 +1221,8 @@
     fitPrintCells(previewEl);
   }
 
-  function guessGroupName(fileName, okResults) {
+  function guessGroupName(fileName, okResults, title) {
+    if (title && title.group) return String(title.group).replace("–", "-");
     const base = (fileName || "").replace(/\.[^.]+$/, "");
     const fromFile = base.match(/([A-Za-zА-Яа-яІіЇїЄєҐґ]{1,5}[-–]?\d{1,3})/);
     if (fromFile) return fromFile[1].replace("–", "-").toUpperCase();
@@ -1142,6 +1241,49 @@
   function formatPageRange(start, end) {
     if (start === end) return String(start);
     return `${start}–${end}`;
+  }
+
+  function titleFieldRow(label, value) {
+    if (!value) return "";
+    return (
+      `<div class="title-field">` +
+      `<span class="title-field-label">${escapeHtml(label)}:</span>` +
+      `<span class="title-field-rule"></span>` +
+      `<span class="title-field-value">${escapeHtml(value)}</span>` +
+      `</div>`
+    );
+  }
+
+  function renderTitlePage(title) {
+    const pack = document.createElement("section");
+    pack.className = "journal-pack";
+    const collegeHtml = (title.collegeLines && title.collegeLines.length
+      ? title.collegeLines
+      : title.college
+        ? [title.college]
+        : []
+    )
+      .map((line) => `<div>${escapeHtml(line)}</div>`)
+      .join("");
+    pack.innerHTML = `<div class="page title-page">
+      <div class="page-content title-content">
+        <div class="title-frame">
+          <div class="title-inner">
+            <div class="title-college">${collegeHtml}</div>
+            <div class="title-word">${escapeHtml(title.journalTitle || "ЖУРНАЛ")}</div>
+            <div class="title-sub">${escapeHtml(title.subtitle || "обліку роботи академічної групи та викладачів")}</div>
+            <div class="title-fields">
+              ${titleFieldRow("Відділення", title.department)}
+              ${titleFieldRow("Група", title.group)}
+              ${titleFieldRow("Курс", title.course)}
+              ${titleFieldRow("Спеціальність", title.specialty)}
+            </div>
+            <div class="title-period">${title.period ? escapeHtml("на " + title.period.replace(/^на\s+/i, "")) : ""}</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+    return pack;
   }
 
   function renderCover(entries, pageNum) {
@@ -1194,7 +1336,7 @@
           "report-item " + (r.kind === "skip" ? "skip" : "error");
         item.textContent =
           r.kind === "skip"
-            ? `${r.label} — службовий, пропущено.`
+            ? `${r.label} — ${r.reason || "службовий, пропущено"}.`
             : `${r.label} не розпізнано, пропущено: ${r.reason}.`;
       } else {
         const d = r.data;
@@ -1224,12 +1366,17 @@
   function processSheets(sheets, opts) {
     const fileName = (opts && opts.fileName) || "";
     previewEl.innerHTML = "";
+    const titleSheet = (sheets || []).find((s) =>
+      fold(s.name || "").includes("титул")
+    );
+    const title = titleSheet ? parseTitlePage(titleSheet.rows) : null;
+    const hasTitle = titlePageUseful(title);
     const results = sheets.map((sheet, index) =>
       parseJournalSheet(sheet.rows, { index, name: sheet.name })
     );
     renderReport(results);
     const ok = results.filter((r) => r.ok);
-    const group = guessGroupName(fileName, ok);
+    const group = guessGroupName(fileName, ok, title);
     lastPdfName = group ? `Журнал групи ${group}.pdf` : "Журнал групи.pdf";
     const pickedEl = document.getElementById("picked-name");
     if (pickedEl) {
@@ -1241,7 +1388,13 @@
       if (ok.length) stagePrint.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     if (ok.length) {
-      let pageNum = PAGE_START + 1;
+      let pageNum = PAGE_START;
+      if (hasTitle) {
+        previewEl.appendChild(renderTitlePage(title));
+        pageNum += 1;
+      }
+      const tocPage = pageNum;
+      pageNum += 1;
       const tocEntries = ok.map((r) => {
         const start = pageNum;
         const end = start + journalPageCount(r.data) - 1;
@@ -1253,8 +1406,8 @@
           end,
         };
       });
-      previewEl.appendChild(renderCover(tocEntries, PAGE_START));
-      pageNum = PAGE_START + 1;
+      previewEl.appendChild(renderCover(tocEntries, tocPage));
+      pageNum = tocPage + 1;
       for (const r of ok) {
         const rendered = renderJournal(r.data, pageNum);
         previewEl.appendChild(rendered.pack);
@@ -1324,6 +1477,618 @@
       name,
       rows: rowsFromSheet(wb.Sheets[name]),
     }));
+  }
+
+  function xmlEscape(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function xmlUnescape(s) {
+    return String(s ?? "")
+      .replace(/&quot;/g, '"')
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&");
+  }
+
+  function setSheetCellXml(xml, addr, text) {
+    const val = xmlEscape(text);
+    const re = new RegExp(
+      `<c([^>]*\\br="${addr}"(?![A-Z0-9])[^>]*)>([\\s\\S]*?)</c>`
+    );
+    const next = `<c r="${addr}" t="str"><v>${val}</v></c>`;
+    if (re.test(xml)) {
+      return xml.replace(re, (full, attrs) => {
+        const style = (attrs.match(/\bs="[^"]*"/) || [""])[0];
+        return style
+          ? `<c r="${addr}" ${style} t="str"><v>${val}</v></c>`
+          : next;
+      });
+    }
+    const rowNum = String(addr).replace(/^[A-Z]+/i, "");
+    const rowRe = new RegExp(`(<row[^>]*\\br="${rowNum}"(?![0-9])[^>]*>)`);
+    if (rowRe.test(xml)) return xml.replace(rowRe, `$1${next}`);
+    return xml.replace(
+      "</sheetData>",
+      `<row r="${rowNum}">${next}</row></sheetData>`
+    );
+  }
+
+  function attrOf(tag, name) {
+    const m = String(tag || "").match(
+      new RegExp(`\\b${name}="([^"]*)"`)
+    );
+    return m ? xmlUnescape(m[1]) : "";
+  }
+
+  function parseXmlSheets(wbXml) {
+    const out = [];
+    const re = /<sheet\b[^>]*\/>/g;
+    let m;
+    while ((m = re.exec(wbXml))) {
+      out.push({
+        name: attrOf(m[0], "name"),
+        rId: attrOf(m[0], "r:id"),
+      });
+    }
+    return out;
+  }
+
+  function parseXmlRels(relsXml) {
+    const out = [];
+    const re = /<Relationship\b[^>]*\/>/g;
+    let m;
+    while ((m = re.exec(relsXml))) {
+      out.push({
+        id: attrOf(m[0], "Id"),
+        type: attrOf(m[0], "Type"),
+        target: attrOf(m[0], "Target"),
+        mode: attrOf(m[0], "TargetMode"),
+      });
+    }
+    return out;
+  }
+
+  function findLabelValueAddr(sheet, needles) {
+    if (!sheet || !sheet["!ref"]) return "";
+    const range = XLSX.utils.decode_range(sheet["!ref"]);
+    const maxR = Math.min(range.e.r, 14);
+    const maxC = Math.min(range.e.c, 40);
+    for (let r = 0; r <= maxR; r++) {
+      for (let c = 0; c <= maxC; c++) {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        const t = fold(excelCellText(sheet[addr]));
+        if (!needles.some((n) => t.includes(fold(n)))) continue;
+        return XLSX.utils.encode_cell({ r, c: c + 1 });
+      }
+    }
+    return "";
+  }
+
+  function scanTitleAddrs(sheet) {
+    const addrs = {};
+    if (!sheet || !sheet["!ref"]) return addrs;
+    const range = XLSX.utils.decode_range(sheet["!ref"]);
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        const raw = excelCellText(sheet[addr]);
+        if (!String(raw).trim()) continue;
+        const f = fold(raw);
+        if (f.includes("відділен") || f.includes("віділен")) addrs.department = addr;
+        else if (/^курс\b/.test(f) || f.startsWith("курс:")) addrs.course = addr;
+        else if (f.includes("спеціальн")) addrs.specialty = addr;
+        else if (f.includes("семестр") || /\bн\.?\s*р\.?\b/i.test(raw)) addrs.period = addr;
+        else if (looksLikeGroupCode(raw)) addrs.group = addr;
+      }
+    }
+    return addrs;
+  }
+
+  function rewriteLabeledCell(oldText, value, fallbackLabel) {
+    const v = String(value || "").trim();
+    if (!v) return String(oldText || "");
+    const old = String(oldText || "");
+    if (/^[^:]{1,48}:/.test(old)) return old.replace(/^([^:]{1,48}:)\s*.*$/, "$1 " + v);
+    if (fallbackLabel) return fallbackLabel + ": " + v;
+    return v;
+  }
+
+  function uniqueSheetName(name, used) {
+    let n = String(name || "")
+      .replace(/[:\\/?*\[\]]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!n) n = "Аркуш";
+    n = n.slice(0, 31);
+    let out = n;
+    let i = 2;
+    while (used.has(fold(out))) {
+      const suffix = ` (${i})`;
+      out = n.slice(0, Math.max(1, 31 - suffix.length)) + suffix;
+      i += 1;
+    }
+    used.add(fold(out));
+    return out;
+  }
+
+  function journalLayoutOf(rows) {
+    const gradesHeaderIdx = findHeaderIndex(rows, [
+      "піб студента",
+      "прізвище та ініціали студента",
+      "прізвище студента",
+      "піб",
+    ]);
+    if (gradesHeaderIdx === -1) return null;
+    const topicsHeaderIdx = findTopicsHeaderIndex(rows, gradesHeaderIdx);
+    if (topicsHeaderIdx === -1) return null;
+    let named = 0;
+    for (let r = gradesHeaderIdx + 1; r < topicsHeaderIdx; r++) {
+      const name = shortenName(String((rows[r] || [])[1] || "").replace(/\/\d+$/, ""));
+      if (name) named += 1;
+    }
+    let dates = 0;
+    const header = rows[gradesHeaderIdx] || [];
+    for (let c = 2; c < header.length; c++) {
+      const raw = cleanHeaderTitle(header[c]);
+      if (raw && isPlausibleGradeHeader(raw)) dates += 1;
+    }
+    return { gradesHeaderIdx, topicsHeaderIdx, named, dates };
+  }
+
+  function pickPrototypeName(sheets) {
+    let best = "";
+    let bestScore = Infinity;
+    for (const s of sheets || []) {
+      if (isMetaSheet(s.name || "")) continue;
+      const lay = journalLayoutOf(s.rows || []);
+      if (!lay) continue;
+      const score = lay.named * 1000 + lay.dates * 10;
+      if (score < bestScore) {
+        bestScore = score;
+        best = s.name;
+      }
+    }
+    return best;
+  }
+
+  function parseSubjectLine(line) {
+    const t = String(line || "").replace(/\s+/g, " ").trim();
+    if (!t) return null;
+    const m = t.split(/\s*[—–\-|]\s+|\s+[—–]\s+/);
+    if (m.length >= 2) {
+      const subject = m[0].trim();
+      const teacher = m.slice(1).join(" ").trim();
+      if (subject) return { subject, teacher };
+    }
+    return { subject: t, teacher: "" };
+  }
+
+  const makeState = {
+    buffer: null,
+    fileName: "",
+    prototypeName: "",
+    titleName: "",
+    titleAddrs: {},
+    titleRaw: {},
+  };
+
+  function setMakeStatus(text, isErr) {
+    const el = document.getElementById("make-status");
+    if (!el) return;
+    el.textContent = text || "";
+    el.className = isErr ? "err" : "";
+  }
+
+  function addSubjectRow(subject, teacher) {
+    const list = document.getElementById("subj-list");
+    if (!list) return;
+    const row = document.createElement("div");
+    row.className = "subj-row";
+    const a = document.createElement("input");
+    a.type = "text";
+    a.placeholder = "Предмет";
+    a.value = subject || "";
+    a.setAttribute("data-k", "subject");
+    const b = document.createElement("input");
+    b.type = "text";
+    b.placeholder = "Викладач";
+    b.value = teacher || "";
+    b.setAttribute("data-k", "teacher");
+    const rm = document.createElement("button");
+    rm.type = "button";
+    rm.className = "subj-remove";
+    rm.textContent = "Прибрати";
+    rm.addEventListener("click", () => row.remove());
+    row.appendChild(a);
+    row.appendChild(b);
+    row.appendChild(rm);
+    list.appendChild(row);
+  }
+
+  function collectSubjectRows() {
+    const list = document.getElementById("subj-list");
+    if (!list) return [];
+    const out = [];
+    list.querySelectorAll(".subj-row").forEach((row) => {
+      const subject = (row.querySelector('[data-k="subject"]') || {}).value || "";
+      const teacher = (row.querySelector('[data-k="teacher"]') || {}).value || "";
+      if (String(subject).trim()) {
+        out.push({
+          subject: String(subject).trim(),
+          teacher: String(teacher).trim(),
+        });
+      }
+    });
+    return out;
+  }
+
+  function fillMakeFormFromTemplate(sheets, wb) {
+    const titleSheet = (sheets || []).find((s) =>
+      fold(s.name || "").includes("титул")
+    );
+    const title = titleSheet ? parseTitlePage(titleSheet.rows) : {};
+    const setVal = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.value = v || "";
+    };
+    setVal("make-group", title.group);
+    setVal("make-course", title.course);
+    setVal("make-dept", title.department);
+    setVal("make-spec", title.specialty);
+    setVal("make-period", title.period);
+    makeState.titleName = titleSheet ? titleSheet.name : "";
+    makeState.titleAddrs = {};
+    makeState.titleRaw = {};
+    if (titleSheet && wb && wb.Sheets[titleSheet.name]) {
+      makeState.titleAddrs = scanTitleAddrs(wb.Sheets[titleSheet.name]);
+      const ts = wb.Sheets[titleSheet.name];
+      Object.keys(makeState.titleAddrs).forEach((k) => {
+        makeState.titleRaw[k] = excelCellText(ts[makeState.titleAddrs[k]]);
+      });
+    }
+    const list = document.getElementById("subj-list");
+    if (list) list.innerHTML = "";
+    let n = 0;
+    for (const s of sheets || []) {
+      if (isMetaSheet(s.name || "")) continue;
+      if (!journalLayoutOf(s.rows || [])) continue;
+      let discipline = "";
+      let teacher = "";
+      for (const row of (s.rows || []).slice(0, 8)) {
+        if (!discipline) {
+          discipline = cellAfterLabel(row, [
+            "назва дисципліни",
+            "назва предмета",
+            "дисципліна",
+          ]);
+        }
+        if (!teacher) teacher = cellAfterLabel(row, ["викладач"]);
+      }
+      addSubjectRow(discipline || s.name, teacher);
+      n += 1;
+    }
+    if (!n) addSubjectRow("", "");
+  }
+
+  async function handleMakeTemplate(file) {
+    if (!file) return;
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array", cellDates: true });
+    const sheets = wb.SheetNames.map((name) => ({
+      name,
+      rows: rowsFromSheet(wb.Sheets[name]),
+    }));
+    const proto = pickPrototypeName(sheets);
+    if (!proto) {
+      setMakeStatus(
+        "У файлі немає аркуша-предмета з колонкою ПІБ і таблицею тем.",
+        true
+      );
+      return;
+    }
+    makeState.buffer = buf;
+    makeState.fileName = file.name || "шаблон.xlsx";
+    makeState.prototypeName = proto;
+    fillMakeFormFromTemplate(sheets, wb);
+    const form = document.getElementById("make-form");
+    if (form) form.hidden = false;
+    const picked = document.getElementById("make-picked");
+    if (picked) {
+      picked.textContent =
+        `${file.name} — зразок аркуша «${proto}». Можна правити список предметів.`;
+    }
+    setMakeStatus("");
+  }
+
+  function bindFileZone(zone, input, onFile) {
+    if (!zone || !input) return;
+    input.addEventListener("change", () => {
+      const file = input.files && input.files[0];
+      if (file) onFile(file);
+    });
+    ["dragenter", "dragover"].forEach((ev) => {
+      zone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        zone.classList.add("dragover");
+      });
+    });
+    ["dragleave", "drop"].forEach((ev) => {
+      zone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        zone.classList.remove("dragover");
+      });
+    });
+    zone.addEventListener("drop", (e) => {
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) onFile(file);
+    });
+  }
+
+  async function buildJournalXlsx(subjects, meta) {
+    if (typeof JSZip === "undefined") {
+      throw new Error("Бібліотека JSZip не завантажилась.");
+    }
+    if (!makeState.buffer) throw new Error("Спочатку оберіть шаблон.");
+    const protoName = makeState.prototypeName;
+    const zip = await JSZip.loadAsync(makeState.buffer);
+    const wbXml = await zip.file("xl/workbook.xml").async("string");
+    const relsXml = await zip.file("xl/_rels/workbook.xml.rels").async("string");
+    const typesFile = zip.file("[Content_Types].xml");
+    if (!typesFile) throw new Error("Файл шаблону пошкоджений (немає Content_Types).");
+    const typesXml = await typesFile.async("string");
+    const listed = parseXmlSheets(wbXml);
+    const rels = parseXmlRels(relsXml);
+    const relById = {};
+    rels.forEach((r) => {
+      relById[r.id] = r;
+    });
+    const proto = listed.find((s) => s.name === protoName);
+    if (!proto || !relById[proto.rId]) {
+      throw new Error("Не знайдено аркуш-зразок у шаблоні.");
+    }
+    const protoTarget = String(relById[proto.rId].target || "").replace(/^\/+/, "");
+    const protoPath = protoTarget.startsWith("xl/")
+      ? protoTarget
+      : "xl/" + protoTarget;
+    const protoXml = await zip.file(protoPath).async("string");
+    const protoRelsPath = protoPath
+      .replace("worksheets/", "worksheets/_rels/")
+      .replace(/\.xml$/, ".xml.rels");
+    const protoRelsFile = zip.file(protoRelsPath);
+    const protoRels = protoRelsFile ? await protoRelsFile.async("string") : "";
+
+    const xlsxWb = XLSX.read(makeState.buffer, { type: "array", cellDates: true });
+    const protoSheet = xlsxWb.Sheets[protoName];
+    const discAddr =
+      findLabelValueAddr(protoSheet, [
+        "назва дисципліни",
+        "назва предмета",
+        "дисципліна",
+      ]) || "C1";
+    const teachAddr =
+      findLabelValueAddr(protoSheet, ["викладач"]) || "C2";
+
+    const keep = listed.filter((s) => isMetaSheet(s.name || ""));
+    const front = [];
+    const back = [];
+    keep.forEach((s) => {
+      const t = fold(s.name || "");
+      if (t.includes("зведен") || t.includes("відомість")) back.push(s);
+      else front.push(s);
+    });
+
+    const usedNames = new Set();
+    const outSheets = [];
+    const copyKept = async (src) => {
+      const rel = relById[src.rId];
+      const target = String((rel && rel.target) || "").replace(/^\/+/, "");
+      const path = target.startsWith("xl/") ? target : "xl/" + target;
+      const xml = await zip.file(path).async("string");
+      const relsP = path
+        .replace("worksheets/", "worksheets/_rels/")
+        .replace(/\.xml$/, ".xml.rels");
+      const rf = zip.file(relsP);
+      outSheets.push({
+        name: uniqueSheetName(src.name, usedNames),
+        xml,
+        rels: rf ? await rf.async("string") : "",
+        patchTitle: fold(src.name || "").includes("титул"),
+      });
+    };
+    for (const s of front) await copyKept(s);
+    for (const sub of subjects) {
+      let xml = protoXml;
+      xml = setSheetCellXml(xml, discAddr, sub.subject);
+      xml = setSheetCellXml(xml, teachAddr, sub.teacher || "");
+      outSheets.push({
+        name: uniqueSheetName(sub.subject, usedNames),
+        xml,
+        rels: protoRels,
+        patchTitle: false,
+      });
+    }
+    for (const s of back) await copyKept(s);
+
+    const titleIdx = outSheets.findIndex((s) => s.patchTitle);
+    if (titleIdx >= 0) {
+      let xml = outSheets[titleIdx].xml;
+      const addrs = makeState.titleAddrs || {};
+      const raw = makeState.titleRaw || {};
+      if (addrs.group && meta.group) {
+        xml = setSheetCellXml(xml, addrs.group, meta.group);
+      }
+      if (addrs.department && meta.department) {
+        xml = setSheetCellXml(
+          xml,
+          addrs.department,
+          rewriteLabeledCell(raw.department, meta.department, "Відділення")
+        );
+      }
+      if (addrs.course && meta.course) {
+        xml = setSheetCellXml(
+          xml,
+          addrs.course,
+          rewriteLabeledCell(raw.course, meta.course, "Курс")
+        );
+      }
+      if (addrs.specialty && meta.specialty) {
+        xml = setSheetCellXml(
+          xml,
+          addrs.specialty,
+          rewriteLabeledCell(raw.specialty, meta.specialty, "Спеціальність")
+        );
+      }
+      if (addrs.period && meta.period) {
+        const p = String(meta.period).trim();
+        const periodText = /^на\s+/i.test(p) ? p : "на " + p;
+        xml = setSheetCellXml(xml, addrs.period, periodText);
+      }
+      outSheets[titleIdx].xml = xml;
+    }
+
+    const out = new JSZip();
+    const skip = new Set([
+      "xl/workbook.xml",
+      "xl/_rels/workbook.xml.rels",
+      "[Content_Types].xml",
+      "xl/calcChain.xml",
+    ]);
+    const files = Object.keys(zip.files);
+    for (const path of files) {
+      const f = zip.files[path];
+      if (f.dir) continue;
+      if (skip.has(path)) continue;
+      if (path.startsWith("xl/worksheets/")) continue;
+      if (/calcChain/i.test(path)) continue;
+      out.file(path, await f.async("uint8array"));
+    }
+
+    const sheetRels = [];
+    const otherRels = rels.filter(
+      (r) => !/\/relationships\/worksheet$/.test(r.type) && !/calcChain/i.test(r.target || "")
+    );
+    outSheets.forEach((s, i) => {
+      const n = i + 1;
+      const sheetPath = `xl/worksheets/sheet${n}.xml`;
+      out.file(sheetPath, s.xml);
+      if (s.rels) out.file(`xl/worksheets/_rels/sheet${n}.xml.rels`, s.rels);
+      sheetRels.push({
+        id: "rId" + n,
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+        target: `worksheets/sheet${n}.xml`,
+      });
+    });
+    const wbRels = sheetRels.concat(
+      otherRels.map((r, i) => ({
+        id: "rId" + (sheetRels.length + i + 1),
+        type: r.type,
+        target: r.target,
+        mode: r.mode,
+      }))
+    );
+    const relsOut =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+      wbRels
+        .map((r) => {
+          const mode = r.mode ? ` TargetMode="${xmlEscape(r.mode)}"` : "";
+          return `<Relationship Id="${r.id}" Type="${xmlEscape(r.type)}" Target="${xmlEscape(r.target)}"${mode}/>`;
+        })
+        .join("") +
+      `</Relationships>`;
+    out.file("xl/_rels/workbook.xml.rels", relsOut);
+
+    const sheetsXml = outSheets
+      .map(
+        (s, i) =>
+          `<sheet name="${xmlEscape(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`
+      )
+      .join("");
+    let newWb = wbXml
+      .replace(/<sheets>[\s\S]*?<\/sheets>/, `<sheets>${sheetsXml}</sheets>`)
+      .replace(/<definedNames>[\s\S]*?<\/definedNames>/, "");
+    out.file("xl/workbook.xml", newWb);
+
+    let newTypes = typesXml.replace(
+      /<Override PartName="\/xl\/worksheets\/sheet\d+\.xml"[^>]*\/>/g,
+      ""
+    );
+    const overrides = outSheets
+      .map(
+        (_, i) =>
+          `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`
+      )
+      .join("");
+    if (newTypes.includes("<Override")) {
+      newTypes = newTypes.replace("<Override", overrides + "<Override");
+    } else {
+      newTypes = newTypes.replace("</Types>", overrides + "</Types>");
+    }
+    out.file("[Content_Types].xml", newTypes);
+
+    const appFile = zip.file("docProps/app.xml");
+    if (appFile) {
+      let appXml = await appFile.async("string");
+      const n = outSheets.length;
+      const titles = outSheets
+        .map((s) => `<vt:lpstr>${xmlEscape(s.name)}</vt:lpstr>`)
+        .join("");
+      appXml = appXml.replace(
+        /<vt:i4>\d+<\/vt:i4>/,
+        `<vt:i4>${n}</vt:i4>`
+      );
+      appXml = appXml.replace(
+        /<TitlesOfParts>[\s\S]*?<\/TitlesOfParts>/,
+        `<TitlesOfParts><vt:vector size="${n}" baseType="lpstr">${titles}</vt:vector></TitlesOfParts>`
+      );
+      out.file("docProps/app.xml", appXml);
+    }
+
+    return out.generateAsync({
+      type: "blob",
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+  }
+
+  async function generateMadeJournal() {
+    const subjects = collectSubjectRows();
+    if (!subjects.length) {
+      setMakeStatus("Додайте хоча б один предмет.", true);
+      return;
+    }
+    const group = (document.getElementById("make-group") || {}).value || "";
+    const meta = {
+      group: String(group).trim(),
+      course: String((document.getElementById("make-course") || {}).value || "").trim(),
+      department: String((document.getElementById("make-dept") || {}).value || "").trim(),
+      specialty: String((document.getElementById("make-spec") || {}).value || "").trim(),
+      period: String((document.getElementById("make-period") || {}).value || "").trim(),
+    };
+    setMakeStatus("Збираю Excel…");
+    try {
+      const blob = await buildJournalXlsx(subjects, meta);
+      const a = document.createElement("a");
+      const name = meta.group
+        ? `Журнал групи ${meta.group}.xlsx`
+        : "Журнал групи.xlsx";
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      setMakeStatus(
+        `Готово: ${subjects.length} предметів, зразок «${makeState.prototypeName}».`
+      );
+    } catch (err) {
+      setMakeStatus(err && err.message ? err.message : String(err), true);
+    }
   }
 
   async function handleFile(file) {
@@ -1419,6 +2184,36 @@ ${styles}
       });
     });
   }
+
+  bindFileZone(
+    document.getElementById("make-drop"),
+    document.getElementById("make-input"),
+    (file) => {
+      handleMakeTemplate(file).catch((err) =>
+        setMakeStatus(err && err.message ? err.message : String(err), true)
+      );
+    }
+  );
+  const subjAdd = document.getElementById("subj-add");
+  if (subjAdd) subjAdd.addEventListener("click", () => addSubjectRow("", ""));
+  const subjPasteBtn = document.getElementById("subj-from-paste");
+  if (subjPasteBtn) {
+    subjPasteBtn.addEventListener("click", () => {
+      const area = document.getElementById("subj-paste");
+      const lines = String((area && area.value) || "").split(/\r?\n/);
+      const parsed = lines.map(parseSubjectLine).filter(Boolean);
+      if (!parsed.length) {
+        setMakeStatus("У списку немає рядків з назвами предметів.", true);
+        return;
+      }
+      const list = document.getElementById("subj-list");
+      if (list) list.innerHTML = "";
+      parsed.forEach((p) => addSubjectRow(p.subject, p.teacher));
+      setMakeStatus(`Підставлено ${parsed.length} предметів зі списку.`);
+    });
+  }
+  const makeBtn = document.getElementById("make-btn");
+  if (makeBtn) makeBtn.addEventListener("click", () => generateMadeJournal());
 
   async function tryAutoload() {
     const q = new URLSearchParams(location.search).get("file");
