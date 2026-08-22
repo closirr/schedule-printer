@@ -242,6 +242,18 @@
       resize: vertical;
       margin: 0 0 8px;
     }
+    .paste-hint {
+      margin: 0 0 6px;
+      color: var(--ink-soft);
+      font-size: 15px;
+      line-height: 1.4;
+    }
+    .paste-example {
+      margin: 0 0 8px;
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 13px;
+      color: var(--ink);
+    }
     .subj-list { display: grid; gap: 6px; margin: 0 0 10px; }
     .subj-row {
       display: grid;
@@ -357,7 +369,10 @@
         </div>
         <p class="subj-head">Предмети</p>
         <div class="subj-list" id="subj-list"></div>
-        <textarea class="make-paste" id="subj-paste" placeholder="Пишіть список тут, по рядку: Українська мова — Петренко О.І."></textarea>
+        <p class="subj-head">Список одним текстом</p>
+        <p class="paste-hint">Кожен рядок: назва предмета, дефіс, прізвище викладача. Один предмет — один рядок.</p>
+        <p class="paste-example">Українська мова — Петренко О.І.</p>
+        <textarea class="make-paste" id="subj-paste" placeholder="Українська мова — Петренко О.І."></textarea>
         <div class="make-actions">
           <button type="button" class="text-btn" id="subj-add">Додати предмет</button>
           <button type="button" class="stamp-btn" id="make-btn">Завантажити Excel</button>
