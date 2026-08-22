@@ -1782,7 +1782,43 @@
     titleName: "",
     titleAddrs: {},
     titleRaw: {},
+    source: "",
   };
+
+  const DEFAULT_TEMPLATE = "template.xlsx";
+  let pasteTimer = 0;
+  let lastPasteKey = "";
+
+  function parsePasteSubjects(text) {
+    return String(text || "")
+      .split(/\r?\n/)
+      .map(parseSubjectLine)
+      .filter(Boolean);
+  }
+
+  function applyPasteList() {
+    const area = document.getElementById("subj-paste");
+    if (!area) return;
+    const parsed = parsePasteSubjects(area.value);
+    if (!parsed.length) return;
+    const key = parsed
+      .map((p) => p.subject + "\t" + p.teacher)
+      .join("\n");
+    if (key === lastPasteKey) return;
+    lastPasteKey = key;
+    const list = document.getElementById("subj-list");
+    if (!list) return;
+    list.innerHTML = "";
+    parsed.forEach((p) => addSubjectRow(p.subject, p.teacher));
+  }
+
+  function schedulePasteSync() {
+    if (pasteTimer) clearTimeout(pasteTimer);
+    pasteTimer = setTimeout(() => {
+      pasteTimer = 0;
+      applyPasteList();
+    }, 180);
+  }
 
   function setMakeStatus(text, isErr) {
     const el = document.getElementById("make-status");
@@ -1834,7 +1870,7 @@
     return out;
   }
 
-  function fillMakeFormFromTemplate(sheets, wb) {
+  function fillMakeFormFromTemplate(sheets, wb, opts) {
     const titleSheet = (sheets || []).find((s) =>
       fold(s.name || "").includes("титул")
     );
@@ -1860,6 +1896,10 @@
     }
     const list = document.getElementById("subj-list");
     if (list) list.innerHTML = "";
+    if (opts && opts.skipSubjects) {
+      addSubjectRow("", "");
+      return;
+    }
     let n = 0;
     for (const s of sheets || []) {
       if (isMetaSheet(s.name || "")) continue;
@@ -1882,7 +1922,7 @@
     if (!n) addSubjectRow("", "");
   }
 
-  async function handleMakeTemplate(file) {
+  async function handleMakeTemplate(file, opts) {
     if (!file) return;
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array", cellDates: true });
@@ -1901,14 +1941,24 @@
     makeState.buffer = buf;
     makeState.fileName = file.name || "шаблон.xlsx";
     makeState.prototypeName = proto;
-    fillMakeFormFromTemplate(sheets, wb);
+    const source = (opts && opts.source) || "custom";
+    fillMakeFormFromTemplate(sheets, wb, {
+      skipSubjects: source === "standard",
+    });
     const form = document.getElementById("make-form");
     if (form) form.hidden = false;
+    makeState.source = source;
+    const card = document.getElementById("tpl-standard");
+    if (card) card.classList.toggle("is-on", source === "standard");
     const picked = document.getElementById("make-picked");
     if (picked) {
       picked.textContent =
-        `${file.name} — зразок аркуша «${proto}». Можна правити список предметів.`;
+        source === "standard"
+          ? "Використовується зараз"
+          : "Свій файл: " + (file.name || "шаблон.xlsx");
     }
+    lastPasteKey = "";
+    applyPasteList();
     setMakeStatus("");
   }
 
@@ -2328,35 +2378,71 @@ ${styles}
     });
   }
 
-  bindFileZone(
-    document.getElementById("make-drop"),
-    document.getElementById("make-input"),
-    (file) => {
-      handleMakeTemplate(file).catch((err) =>
+  const makeInput = document.getElementById("make-input");
+  if (makeInput) {
+    makeInput.addEventListener("change", () => {
+      const file = makeInput.files && makeInput.files[0];
+      if (!file) return;
+      handleMakeTemplate(file, { source: "custom" }).catch((err) =>
         setMakeStatus(err && err.message ? err.message : String(err), true)
       );
-    }
-  );
+    });
+  }
   const subjAdd = document.getElementById("subj-add");
   if (subjAdd) subjAdd.addEventListener("click", () => addSubjectRow("", ""));
-  const subjPasteBtn = document.getElementById("subj-from-paste");
-  if (subjPasteBtn) {
-    subjPasteBtn.addEventListener("click", () => {
-      const area = document.getElementById("subj-paste");
-      const lines = String((area && area.value) || "").split(/\r?\n/);
-      const parsed = lines.map(parseSubjectLine).filter(Boolean);
-      if (!parsed.length) {
-        setMakeStatus("У списку немає рядків з назвами предметів.", true);
-        return;
-      }
-      const list = document.getElementById("subj-list");
-      if (list) list.innerHTML = "";
-      parsed.forEach((p) => addSubjectRow(p.subject, p.teacher));
-      setMakeStatus(`Підставлено ${parsed.length} предметів зі списку.`);
+  const subjPaste = document.getElementById("subj-paste");
+  if (subjPaste) {
+    subjPaste.addEventListener("input", schedulePasteSync);
+    subjPaste.addEventListener("paste", () => {
+      setTimeout(applyPasteList, 0);
     });
   }
   const makeBtn = document.getElementById("make-btn");
   if (makeBtn) makeBtn.addEventListener("click", () => generateMadeJournal());
+
+  const tplThumb = document.getElementById("tpl-thumb");
+  const tplZoom = document.getElementById("tpl-zoom");
+  if (tplThumb && tplZoom) {
+    tplThumb.addEventListener("click", (e) => {
+      e.stopPropagation();
+      tplZoom.hidden = false;
+    });
+    tplZoom.addEventListener("click", () => {
+      tplZoom.hidden = true;
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !tplZoom.hidden) tplZoom.hidden = true;
+    });
+  }
+
+  async function loadDefaultTemplate() {
+    if (!document.getElementById("stage-make")) return;
+    if (makeState.source === "standard" && makeState.buffer) return;
+    try {
+      const res = await fetch(DEFAULT_TEMPLATE);
+      if (!res.ok) throw new Error("Не вдалося підвантажити стандартний шаблон.");
+      const blob = await res.blob();
+      const file = new File(
+        [blob],
+        "Стандартний шаблон.xlsx",
+        { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
+      );
+      await handleMakeTemplate(file, { source: "standard" });
+    } catch (err) {
+      const picked = document.getElementById("make-picked");
+      if (picked) picked.textContent = "Стандартний шаблон не підвантажився.";
+      setMakeStatus(err && err.message ? err.message : String(err), true);
+    }
+  }
+  const tplCard = document.getElementById("tpl-standard");
+  if (tplCard) {
+    tplCard.addEventListener("click", (e) => {
+      if (e.target.closest("#tpl-thumb")) return;
+      loadDefaultTemplate();
+    });
+    tplCard.style.cursor = "pointer";
+  }
+  loadDefaultTemplate();
 
   async function tryAutoload() {
     const q = new URLSearchParams(location.search).get("file");

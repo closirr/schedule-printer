@@ -109,41 +109,73 @@
       transform: rotate(-2deg);
     }
     .stamp-btn:hover { background: var(--stamp); color: var(--paper); }
-    .dropzone {
-      max-width: 210mm;
-      margin: 0 auto 18px;
-      border: 1.5px dashed var(--ink);
-      background: rgba(255, 255, 255, 0.35);
-      padding: 22px 24px;
+    .tpl-card {
       display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 12px;
+      grid-template-columns: 78px 1fr;
+      gap: 14px;
       align-items: center;
+      border: 1.5px solid var(--ink);
+      background: rgba(255,255,255,0.45);
+      padding: 12px 14px;
+      margin: 0 0 10px;
     }
-    .dropzone.dragover {
+    .tpl-card.is-on { box-shadow: inset 3px 0 0 var(--ink); }
+    .tpl-thumb {
+      appearance: none;
+      border: 1px solid var(--ink);
+      padding: 0;
+      width: 78px;
+      height: 104px;
       background: #fff;
-      box-shadow: inset 0 0 0 2px var(--ink);
+      cursor: zoom-in;
+      overflow: hidden;
     }
-    .dropzone strong { font-size: 18px; }
-    .dropzone span {
+    .tpl-thumb img {
       display: block;
-      margin-top: 4px;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top center;
+    }
+    .tpl-kicker {
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin: 0 0 4px;
+    }
+    .tpl-card strong { font-size: 18px; }
+    .tpl-note {
+      margin: 4px 0 0;
       color: var(--ink-soft);
       font-size: 15px;
     }
-    .file-btn {
-      appearance: none;
-      border: 1px solid var(--ink);
-      background: var(--ink);
-      color: var(--paper);
-      font-family: "Fragment Mono", ui-monospace, monospace;
-      font-size: 12px;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      padding: 10px 14px;
-      cursor: pointer;
+    .tpl-extra {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 18px;
+      align-items: center;
+      margin: 0 0 18px;
     }
-    .file-btn:hover { background: transparent; color: var(--ink); }
+    .tpl-zoom {
+      position: fixed;
+      inset: 0;
+      background: rgba(28, 20, 16, 0.72);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      z-index: 20;
+      cursor: zoom-out;
+    }
+    .tpl-zoom[hidden] { display: none; }
+    .tpl-zoom img {
+      max-width: min(92vw, 520px);
+      max-height: 92vh;
+      background: #fff;
+      box-shadow: 0 12px 40px rgba(28, 20, 16, 0.35);
+    }
     .make-lead {
       margin: 0 0 14px;
       color: var(--ink-soft);
@@ -178,7 +210,7 @@
       padding: 7px 8px;
     }
     .make-paste {
-      min-height: 72px;
+      min-height: 96px;
       resize: vertical;
       margin: 0 0 8px;
     }
@@ -233,6 +265,7 @@
       .masthead-row { flex-direction: column; gap: 12px; }
       .nav-chip { margin-top: 0; align-self: flex-start; }
       .make-grid, .subj-row { grid-template-columns: 1fr; }
+      .tpl-card { grid-template-columns: 64px 1fr; }
     }
   </style>
 </head>
@@ -251,16 +284,23 @@
     <section class="stage" id="stage-make">
       <p class="stage-num">Новий Excel</p>
       <h2>Шаблон і список предметів</h2>
-      <p class="make-lead">Завантажте шаблон електронного журналу, вкажіть предмети й викладачів. Кожен предмет стане окремим аркушем з тією самою розміткою, що й порожня «Всесвітня історія».</p>
-      <div class="dropzone" id="make-drop">
+      <p class="make-lead">Завантажте шаблон електронного журналу, вкажіть предмети й викладачів. Кожен предмет стане окремим аркушем з тією самою розміткою.</p>
+      <div class="tpl-card is-on" id="tpl-standard">
+        <button type="button" class="tpl-thumb" id="tpl-thumb" aria-label="Збільшити перегляд шаблону">
+          <img src="template-preview.png" alt="Стандартний шаблон журналу">
+        </button>
         <div>
-          <strong>Шаблон .xlsx</strong>
-          <span id="make-picked">Потрібен файл з аркушем-предметом (сітка студентів і тем).</span>
+          <p class="tpl-kicker">Використати стандартний шаблон</p>
+          <strong>Стандартний шаблон</strong>
+          <p class="tpl-note" id="make-picked">Підвантажую…</p>
         </div>
-        <label class="file-btn">
-          Обрати шаблон
-          <input type="file" id="make-input" accept=".xlsx,.xls" hidden>
-        </label>
+      </div>
+      <div class="tpl-extra">
+        <label class="text-btn" for="make-input">Завантажити свій шаблон</label>
+        <input type="file" id="make-input" accept=".xlsx,.xls" hidden>
+      </div>
+      <div class="tpl-zoom" id="tpl-zoom" hidden>
+        <img src="template-preview.png" alt="Стандартний шаблон журналу, збільшено">
       </div>
       <div id="make-form" hidden>
         <div class="make-grid">
@@ -287,10 +327,9 @@
         </div>
         <p class="subj-head">Предмети</p>
         <div class="subj-list" id="subj-list"></div>
-        <textarea class="make-paste" id="subj-paste" placeholder="Або вставте список, по рядку: Українська мова — Петренко О.І."></textarea>
+        <textarea class="make-paste" id="subj-paste" placeholder="Пишіть список тут, по рядку: Українська мова — Петренко О.І."></textarea>
         <div class="make-actions">
           <button type="button" class="text-btn" id="subj-add">Додати предмет</button>
-          <button type="button" class="text-btn" id="subj-from-paste">Підставити зі списку</button>
           <button type="button" class="stamp-btn" id="make-btn">Завантажити Excel</button>
         </div>
         <p id="make-status"></p>
