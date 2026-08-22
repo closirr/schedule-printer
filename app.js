@@ -2637,8 +2637,6 @@ ${styles}
     tplMakeMain.addEventListener("click", () => publishStandardTemplate());
   }
 
-  loadDefaultTemplate();
-
   async function tryAutoload() {
     const q = new URLSearchParams(location.search).get("file");
     if (!q) return;

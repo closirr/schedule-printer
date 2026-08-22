@@ -116,6 +116,14 @@
       font-size: 15px;
       line-height: 1.4;
     }
+    .how-tpl {
+      margin: 0 0 16px;
+      padding: 0 0 0 18px;
+      color: var(--ink);
+      font-size: 15px;
+      line-height: 1.45;
+    }
+    .how-tpl li { margin: 0 0 6px; }
     .tpl-zone {
       display: grid;
       grid-template-columns: 1fr auto;
@@ -304,7 +312,12 @@
     <section class="stage" id="stage-make">
       <p class="stage-num">Новий Excel</p>
       <h2>Шаблон і список предметів</h2>
-      <p class="make-lead">У файлі має бути аркуш <strong>Шаблон</strong> — сітка журналу. Службові аркуші будь-які, вони копіюються як є.</p>
+      <p class="make-lead">Завантажте Excel, вкажіть предмети й викладачів. Кожен предмет стане окремим аркушем із сітки «Шаблон».</p>
+      <ol class="how-tpl">
+        <li>Службові аркуші будь-які: титул, карта студента, коди, відомості. Вони потраплять у новий журнал як є.</li>
+        <li>Має бути один аркуш з назвою <strong>Шаблон</strong> — порожня сітка журналу (ПІБ, оцінки, теми). Його копіюємо на кожен предмет.</li>
+        <li>Інші аркуші-предмети в цьому файлі ігноруються.</li>
+      </ol>
       <div class="tpl-zone is-empty" id="tpl-zone">
         <div class="tpl-zone-info">
           <p class="tpl-zone-kicker" id="tpl-zone-kicker">Шаблон</p>

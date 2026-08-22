@@ -17,6 +17,11 @@ export default async (req, context) => {
         },
       });
     }
+    if (req.method === "DELETE") {
+      await store.delete("template.xlsx");
+      await store.delete("template-name");
+      return new Response("ok");
+    }
     if (req.method === "PUT" || req.method === "POST") {
       const buf = Buffer.from(await req.arrayBuffer());
       if (buf.length < 800) {
