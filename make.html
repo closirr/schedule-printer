@@ -109,100 +109,27 @@
       transform: rotate(-2deg);
     }
     .stamp-btn:hover { background: var(--stamp); color: var(--paper); }
-    .tpl-card {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px;
-      align-items: start;
-      border: 1.5px solid var(--ink);
-      background: rgba(255,255,255,0.45);
-      padding: 12px 14px;
-      margin: 0 0 10px;
-    }
-    .tpl-card.is-on { box-shadow: inset 3px 0 0 var(--ink); }
-    .tpl-thumb {
-      appearance: none;
-      border: 1px solid var(--ink);
-      padding: 0;
-      width: 100%;
-      height: 148px;
-      background: #fff;
-      cursor: zoom-in;
-      overflow: hidden;
-    }
-    .tpl-thumb img {
-      display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      object-position: top left;
-    }
-    .tpl-kicker {
-      font-family: "Fragment Mono", ui-monospace, monospace;
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--ink-soft);
-      margin: 0 0 4px;
-    }
-    .tpl-card strong { font-size: 18px; }
-    .tpl-note {
-      margin: 4px 0 0;
-      color: var(--ink-soft);
-      font-size: 15px;
-    }
-    .tpl-extra {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px 18px;
-      align-items: center;
-      margin: 0 0 18px;
-    }
-    .tpl-zoom {
-      position: fixed;
-      inset: 0;
-      background: rgba(28, 20, 16, 0.72);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      z-index: 20;
-      cursor: zoom-out;
-    }
-    .tpl-zoom[hidden] { display: none; }
-    .tpl-zoom img {
-      max-width: 92vw;
-      max-height: 92vh;
-      background: #fff;
-      box-shadow: 0 12px 40px rgba(28, 20, 16, 0.35);
-    }
     .make-lead {
       margin: 0 0 14px;
       color: var(--ink-soft);
       font-size: 15px;
       line-height: 1.4;
     }
-    .how-tpl {
-      margin: 0 0 16px;
-      padding: 0 0 0 18px;
-      color: var(--ink);
-      font-size: 15px;
-      line-height: 1.45;
+    .tpl-file {
+      margin: 0 0 12px;
+      font-size: 16px;
     }
-    .how-tpl li { margin: 0 0 6px; }
-    .old-way {
-      margin: 0 0 8px;
-      font-size: 15px;
-      color: var(--ink-soft);
-    }
-    .old-way summary {
-      cursor: pointer;
+    .tpl-file code {
       font-family: "Fragment Mono", ui-monospace, monospace;
-      font-size: 12px;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
+      font-size: 14px;
     }
-    .old-way p { margin: 8px 0; }
+    .tpl-extra {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin: 0 0 10px;
+    }
     .solid-btn {
       appearance: none;
       border: 1.5px solid var(--ink);
@@ -217,7 +144,8 @@
     }
     .solid-btn:hover { background: transparent; color: var(--ink); }
     .solid-btn:active { transform: translateY(1px); }
-    #tpl-admin-status { margin: 8px 0 0; font-size: 14px; }
+    label.solid-btn { display: inline-block; }
+    #tpl-admin-status { margin: 8px 0 16px; font-size: 14px; color: var(--ink-soft); }
     #tpl-admin-status.err { color: var(--stamp-dark); }
     .make-grid {
       display: grid;
@@ -302,7 +230,6 @@
       .masthead-row { flex-direction: column; gap: 12px; }
       .nav-chip { margin-top: 0; align-self: flex-start; }
       .make-grid, .subj-row { grid-template-columns: 1fr; }
-      .tpl-thumb { height: 120px; }
     }
   </style>
 </head>
@@ -321,32 +248,14 @@
     <section class="stage" id="stage-make">
       <p class="stage-num">Новий Excel</p>
       <h2>Шаблон і список предметів</h2>
-      <p class="make-lead">Завантажте Excel, вкажіть предмети й викладачів. Кожен предмет стане окремим аркушем із сітки «Шаблон».</p>
-      <ol class="how-tpl">
-        <li>Службові аркуші будь-які: титул, карта студента, коди, відомості. Вони потраплять у новий журнал як є.</li>
-        <li>Має бути один аркуш з назвою <strong>Шаблон</strong> — порожня сітка журналу (ПІБ, оцінки, теми). Його копіюємо на кожен предмет.</li>
-        <li>Інші аркуші-предмети в цьому файлі ігноруються.</li>
-      </ol>
-      <div class="tpl-card is-on" id="tpl-standard">
-        <button type="button" class="tpl-thumb" id="tpl-thumb" aria-label="Збільшити перегляд аркуша журналу">
-          <img src="template-preview.png" alt="Аркуш журналу: оцінки і відвідування">
-        </button>
-        <div>
-          <p class="tpl-kicker">Використати стандартний шаблон</p>
-          <strong>Стандартний шаблон</strong>
-          <p class="tpl-note" id="make-picked">Підвантажую…</p>
-        </div>
-      </div>
+      <p class="make-lead">У файлі має бути аркуш <strong>Шаблон</strong> — сітка журналу. Службові аркуші будь-які, вони копіюються як є.</p>
+      <p class="tpl-file">Основний шаблон: <code id="tpl-main-name">template.xlsx</code></p>
       <div class="tpl-extra">
-        <button type="button" class="solid-btn" id="tpl-make-main">Зробити шаблон основним</button>
-        <label class="text-btn" for="make-input">Завантажити лише для себе</label>
+        <label class="solid-btn" for="make-input">Завантажити шаблон</label>
         <input type="file" id="make-input" accept=".xlsx,.xls" hidden>
-        <input id="tpl-admin-file" type="file" accept=".xlsx,.xls" hidden>
+        <button type="button" class="solid-btn" id="tpl-make-main" hidden>Зберегти як основний</button>
       </div>
       <p id="tpl-admin-status"></p>
-      <div class="tpl-zoom" id="tpl-zoom" hidden>
-        <img src="template-preview.png" alt="Аркуш журналу: оцінки і відвідування, збільшено">
-      </div>
       <div id="make-form" hidden>
         <div class="make-grid">
           <div class="make-field">

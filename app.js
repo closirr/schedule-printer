@@ -1926,11 +1926,34 @@
     }, 180);
   }
 
-  function setMakeStatus(text, isErr) {
-    const el = document.getElementById("make-status");
+  function xlsxFileName(name) {
+    let n = String(name || "template.xlsx")
+      .replace(/^.*[/\\]/, "")
+      .trim();
+    if (!n) n = "template.xlsx";
+    if (!/\.xlsx?$/i.test(n)) n += ".xlsx";
+    return n;
+  }
+
+  function setMainTemplateName(name) {
+    const el = document.getElementById("tpl-main-name");
+    if (el) el.textContent = xlsxFileName(name);
+  }
+
+  function setTplStatus(text, isErr) {
+    const el = document.getElementById("tpl-admin-status");
     if (!el) return;
     el.textContent = text || "";
     el.className = isErr ? "err" : "";
+  }
+
+  function setMakeStatus(text, isErr) {
+    const el = document.getElementById("make-status");
+    if (el) {
+      el.textContent = text || "";
+      el.className = isErr ? "err" : "";
+    }
+    if (isErr) setTplStatus(text, true);
   }
 
   function addSubjectRow(subject, teacher) {
@@ -2045,7 +2068,7 @@
       return;
     }
     makeState.buffer = buf;
-    makeState.fileName = file.name || "шаблон.xlsx";
+    makeState.fileName = xlsxFileName(file.name);
     makeState.prototypeName = protoSheet.name;
     const source = (opts && opts.source) || "custom";
     fillMakeFormFromTemplate(sheets, wb, {
@@ -2054,14 +2077,13 @@
     const form = document.getElementById("make-form");
     if (form) form.hidden = false;
     makeState.source = source;
-    const card = document.getElementById("tpl-standard");
-    if (card) card.classList.toggle("is-on", source === "standard");
-    const picked = document.getElementById("make-picked");
-    if (picked) {
-      picked.textContent =
-        source === "standard"
-          ? "Використовується зараз"
-          : "Свій файл: " + (file.name || "шаблон.xlsx");
+    const saveBtn = document.getElementById("tpl-make-main");
+    if (saveBtn) saveBtn.hidden = source !== "custom";
+    if (source === "standard") {
+      setMainTemplateName(makeState.fileName);
+      setTplStatus("");
+    } else {
+      setTplStatus("Завантажено: " + makeState.fileName);
     }
     lastPasteKey = "";
     applyPasteList();
@@ -2503,21 +2525,6 @@ ${styles}
   const makeBtn = document.getElementById("make-btn");
   if (makeBtn) makeBtn.addEventListener("click", () => generateMadeJournal());
 
-  const tplThumb = document.getElementById("tpl-thumb");
-  const tplZoom = document.getElementById("tpl-zoom");
-  if (tplThumb && tplZoom) {
-    tplThumb.addEventListener("click", (e) => {
-      e.stopPropagation();
-      tplZoom.hidden = false;
-    });
-    tplZoom.addEventListener("click", () => {
-      tplZoom.hidden = true;
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !tplZoom.hidden) tplZoom.hidden = true;
-    });
-  }
-
   async function fetchStandardTemplateBlob() {
     const urls = [
       "/api/template",
@@ -2530,7 +2537,17 @@ ${styles}
         const res = await fetch(url, { cache: "no-store" });
         if (!res.ok) continue;
         const blob = await res.blob();
-        if (blob && blob.size > 800) return blob;
+        if (!blob || blob.size <= 800) continue;
+        const header = res.headers.get("X-Template-Name");
+        let name = "template.xlsx";
+        if (header) {
+          try {
+            name = decodeURIComponent(header);
+          } catch (e) {
+            name = header;
+          }
+        }
+        return { blob, name: xlsxFileName(name) };
       } catch (err) {
         lastErr = err;
       }
@@ -2542,69 +2559,51 @@ ${styles}
     if (!document.getElementById("stage-make")) return;
     if (!force && makeState.source === "standard" && makeState.buffer) return;
     try {
-      const blob = await fetchStandardTemplateBlob();
+      const got = await fetchStandardTemplateBlob();
       const file = new File(
-        [blob],
-        "Стандартний шаблон.xlsx",
+        [got.blob],
+        got.name || "template.xlsx",
         { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
       );
       await handleMakeTemplate(file, { source: "standard" });
     } catch (err) {
-      const picked = document.getElementById("make-picked");
-      if (picked) picked.textContent = "Стандартний шаблон не підвантажився.";
-      setMakeStatus(err && err.message ? err.message : String(err), true);
+      setMainTemplateName("template.xlsx");
+      setTplStatus(err && err.message ? err.message : String(err), true);
     }
   }
-  const tplCard = document.getElementById("tpl-standard");
-  if (tplCard) {
-    tplCard.addEventListener("click", (e) => {
-      if (e.target.closest("#tpl-thumb")) return;
-      loadDefaultTemplate();
-    });
-    tplCard.style.cursor = "pointer";
-  }
 
-  async function publishStandardTemplate(file) {
-    const status = document.getElementById("tpl-admin-status");
-    const say = (t, err) => {
-      if (!status) return;
-      status.textContent = t;
-      status.className = err ? "err" : "";
-    };
-    if (!file) {
-      say("Оберіть Excel-файл з аркушем «Шаблон».", true);
+  async function publishStandardTemplate() {
+    if (!makeState.buffer) {
+      setTplStatus("Спочатку завантажте шаблон.", true);
       return;
     }
     try {
-      await handleMakeTemplate(file, { source: "custom" });
-      if (!makeState.buffer) return;
-      say("Зберігаю як основний…");
+      setTplStatus("Зберігаю як основний…");
       const res = await fetch("/api/template", {
         method: "PUT",
+        headers: {
+          "x-template-name": encodeURIComponent(makeState.fileName || "template.xlsx"),
+        },
         body: makeState.buffer,
       });
       const text = await res.text();
       if (!res.ok) {
-        say(text || "Не вдалося зберегти.", true);
+        setTplStatus(text || "Не вдалося зберегти.", true);
         return;
       }
-      say("Цей файл тепер основний шаблон для всіх.");
-      makeState.source = "";
-      await loadDefaultTemplate(true);
+      setMainTemplateName(makeState.fileName);
+      const saveBtn = document.getElementById("tpl-make-main");
+      if (saveBtn) saveBtn.hidden = true;
+      makeState.source = "standard";
+      setTplStatus("Збережено як основний: " + xlsxFileName(makeState.fileName));
     } catch (err) {
-      say(err && err.message ? err.message : String(err), true);
+      setTplStatus(err && err.message ? err.message : String(err), true);
     }
   }
 
   const tplMakeMain = document.getElementById("tpl-make-main");
-  const tplAdminFile = document.getElementById("tpl-admin-file");
-  if (tplMakeMain && tplAdminFile) {
-    tplMakeMain.addEventListener("click", () => tplAdminFile.click());
-    tplAdminFile.addEventListener("change", () => {
-      const file = tplAdminFile.files && tplAdminFile.files[0];
-      if (file) publishStandardTemplate(file);
-      tplAdminFile.value = "";
-    });
+  if (tplMakeMain) {
+    tplMakeMain.addEventListener("click", () => publishStandardTemplate());
   }
 
   loadDefaultTemplate();
