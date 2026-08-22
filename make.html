@@ -18,6 +18,7 @@
       --stamp-dark: #8a1810;
     }
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     html, body { margin: 0; }
     body {
       font-family: "Newsreader", "Times New Roman", serif;
@@ -115,26 +116,69 @@
       font-size: 15px;
       line-height: 1.4;
     }
-    .tpl-file {
-      margin: 0 0 12px;
-      font-size: 16px;
-    }
-    .tpl-file code {
-      font-family: "Fragment Mono", ui-monospace, monospace;
-      font-size: 14px;
-    }
-    .tpl-extra {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
+    .tpl-zone {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 14px 18px;
       align-items: center;
       margin: 0 0 10px;
+      padding: 16px 18px;
+      border: 1.5px dashed var(--ink);
+      background: rgba(255, 255, 255, 0.35);
     }
-    .solid-btn {
+    .tpl-zone.dragover {
+      background: #fff;
+      box-shadow: inset 0 0 0 2px var(--ink);
+    }
+    .tpl-zone.is-main {
+      border-style: solid;
+      border-color: var(--stamp);
+      background: rgba(180, 35, 24, 0.07);
+      box-shadow: inset 4px 0 0 var(--stamp);
+    }
+    .tpl-zone-kicker {
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin: 0 0 4px;
+    }
+    .tpl-zone.is-main .tpl-zone-kicker { color: var(--stamp-dark); }
+    .tpl-zone-name {
+      margin: 0;
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 15px;
+      word-break: break-word;
+    }
+    .tpl-zone-hint {
+      margin: 6px 0 10px;
+      color: var(--ink-soft);
+      font-size: 14px;
+    }
+    .tpl-zone-side {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .tpl-badge {
+      display: inline-block;
+      border: 2px solid var(--stamp);
+      color: var(--stamp);
+      background: rgba(255, 255, 255, 0.7);
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 8px 12px;
+      transform: rotate(-3deg);
+    }
+    .solid-btn,
+    .ghost-btn {
       appearance: none;
       border: 1.5px solid var(--ink);
-      background: var(--ink);
-      color: var(--paper);
       font-family: "Fragment Mono", ui-monospace, monospace;
       font-size: 12px;
       letter-spacing: 0.08em;
@@ -142,9 +186,20 @@
       padding: 11px 16px;
       cursor: pointer;
     }
+    .solid-btn {
+      background: var(--ink);
+      color: var(--paper);
+    }
     .solid-btn:hover { background: transparent; color: var(--ink); }
-    .solid-btn:active { transform: translateY(1px); }
-    label.solid-btn { display: inline-block; }
+    .ghost-btn {
+      background: transparent;
+      color: var(--ink);
+    }
+    .ghost-btn:hover { background: var(--ink); color: var(--paper); }
+    .solid-btn:active,
+    .ghost-btn:active { transform: translateY(1px); }
+    label.solid-btn,
+    label.ghost-btn { display: inline-block; }
     #tpl-admin-status { margin: 8px 0 16px; font-size: 14px; color: var(--ink-soft); }
     #tpl-admin-status.err { color: var(--stamp-dark); }
     .make-grid {
@@ -229,7 +284,8 @@
     @media (max-width: 720px) {
       .masthead-row { flex-direction: column; gap: 12px; }
       .nav-chip { margin-top: 0; align-self: flex-start; }
-      .make-grid, .subj-row { grid-template-columns: 1fr; }
+      .make-grid, .subj-row, .tpl-zone { grid-template-columns: 1fr; }
+      .tpl-zone-side { justify-content: flex-start; }
     }
   </style>
 </head>
@@ -249,11 +305,18 @@
       <p class="stage-num">Новий Excel</p>
       <h2>Шаблон і список предметів</h2>
       <p class="make-lead">У файлі має бути аркуш <strong>Шаблон</strong> — сітка журналу. Службові аркуші будь-які, вони копіюються як є.</p>
-      <p class="tpl-file">Основний шаблон: <code id="tpl-main-name">template.xlsx</code></p>
-      <div class="tpl-extra">
-        <label class="solid-btn" for="make-input">Завантажити шаблон</label>
-        <input type="file" id="make-input" accept=".xlsx,.xls" hidden>
-        <button type="button" class="solid-btn" id="tpl-make-main" hidden>Зберегти як основний</button>
+      <div class="tpl-zone is-empty" id="tpl-zone">
+        <div class="tpl-zone-info">
+          <p class="tpl-zone-kicker" id="tpl-zone-kicker">Шаблон</p>
+          <p class="tpl-zone-name" id="tpl-main-name">Файл не обрано</p>
+          <p class="tpl-zone-hint" id="tpl-zone-hint">Перетягніть .xlsx сюди або оберіть файл</p>
+          <label class="ghost-btn" for="make-input" id="tpl-change-btn">Завантажити шаблон</label>
+          <input type="file" id="make-input" accept=".xlsx,.xls" hidden>
+        </div>
+        <div class="tpl-zone-side">
+          <span class="tpl-badge" id="tpl-main-badge" hidden>Основний</span>
+          <button type="button" class="solid-btn" id="tpl-make-main" hidden>Зробити основним</button>
+        </div>
       </div>
       <p id="tpl-admin-status"></p>
       <div id="make-form" hidden>

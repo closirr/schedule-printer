@@ -1935,9 +1935,39 @@
     return n;
   }
 
-  function setMainTemplateName(name) {
-    const el = document.getElementById("tpl-main-name");
-    if (el) el.textContent = xlsxFileName(name);
+  function syncTemplateCard() {
+    const zone = document.getElementById("tpl-zone");
+    if (!zone) return;
+    const kicker = document.getElementById("tpl-zone-kicker");
+    const hint = document.getElementById("tpl-zone-hint");
+    const changeBtn = document.getElementById("tpl-change-btn");
+    const saveBtn = document.getElementById("tpl-make-main");
+    const badge = document.getElementById("tpl-main-badge");
+    const hasFile = Boolean(makeState.buffer);
+    const isMain = hasFile && makeState.source === "standard";
+    zone.classList.toggle("is-main", isMain);
+    zone.classList.toggle("is-empty", !hasFile);
+    const nameEl = document.getElementById("tpl-main-name");
+    if (nameEl) {
+      nameEl.textContent = hasFile ? xlsxFileName(makeState.fileName) : "Файл не обрано";
+    }
+    if (kicker) {
+      kicker.textContent = !hasFile
+        ? "Шаблон"
+        : isMain
+          ? "Основний шаблон"
+          : "Обраний шаблон";
+    }
+    if (hint) {
+      hint.textContent = hasFile
+        ? "Перетягніть інший .xlsx сюди, щоб замінити"
+        : "Перетягніть .xlsx сюди або оберіть файл";
+    }
+    if (changeBtn) {
+      changeBtn.textContent = hasFile ? "Змінити шаблон" : "Завантажити шаблон";
+    }
+    if (badge) badge.hidden = !isMain;
+    if (saveBtn) saveBtn.hidden = !(hasFile && !isMain);
   }
 
   function setTplStatus(text, isErr) {
@@ -2077,23 +2107,23 @@
     const form = document.getElementById("make-form");
     if (form) form.hidden = false;
     makeState.source = source;
-    const saveBtn = document.getElementById("tpl-make-main");
-    if (saveBtn) saveBtn.hidden = source !== "custom";
-    if (source === "standard") {
-      setMainTemplateName(makeState.fileName);
-      setTplStatus("");
-    } else {
-      setTplStatus("Завантажено: " + makeState.fileName);
-    }
+    syncTemplateCard();
+    setTplStatus("");
     lastPasteKey = "";
     applyPasteList();
     setMakeStatus("");
+  }
+
+  function isExcelFile(file) {
+    const n = String((file && file.name) || "").toLowerCase();
+    return n.endsWith(".xlsx") || n.endsWith(".xls");
   }
 
   function bindFileZone(zone, input, onFile) {
     if (!zone || !input) return;
     input.addEventListener("change", () => {
       const file = input.files && input.files[0];
+      input.value = "";
       if (file) onFile(file);
     });
     ["dragenter", "dragover"].forEach((ev) => {
@@ -2503,16 +2533,19 @@ ${styles}
     });
   }
 
-  const makeInput = document.getElementById("make-input");
-  if (makeInput) {
-    makeInput.addEventListener("change", () => {
-      const file = makeInput.files && makeInput.files[0];
-      if (!file) return;
+  bindFileZone(
+    document.getElementById("tpl-zone"),
+    document.getElementById("make-input"),
+    (file) => {
+      if (!isExcelFile(file)) {
+        setTplStatus("Потрібен файл Excel (.xlsx).", true);
+        return;
+      }
       handleMakeTemplate(file, { source: "custom" }).catch((err) =>
         setMakeStatus(err && err.message ? err.message : String(err), true)
       );
-    });
-  }
+    }
+  );
   const subjAdd = document.getElementById("subj-add");
   if (subjAdd) subjAdd.addEventListener("click", () => addSubjectRow("", ""));
   const subjPaste = document.getElementById("subj-paste");
@@ -2567,7 +2600,7 @@ ${styles}
       );
       await handleMakeTemplate(file, { source: "standard" });
     } catch (err) {
-      setMainTemplateName("template.xlsx");
+      syncTemplateCard();
       setTplStatus(err && err.message ? err.message : String(err), true);
     }
   }
@@ -2591,11 +2624,9 @@ ${styles}
         setTplStatus(text || "Не вдалося зберегти.", true);
         return;
       }
-      setMainTemplateName(makeState.fileName);
-      const saveBtn = document.getElementById("tpl-make-main");
-      if (saveBtn) saveBtn.hidden = true;
       makeState.source = "standard";
-      setTplStatus("Збережено як основний: " + xlsxFileName(makeState.fileName));
+      syncTemplateCard();
+      setTplStatus("Цей шаблон тепер основний.");
     } catch (err) {
       setTplStatus(err && err.message ? err.message : String(err), true);
     }
