@@ -1763,6 +1763,99 @@
     return best;
   }
 
+  function colLettersToNum(letters) {
+    let n = 0;
+    for (const ch of String(letters || "")) {
+      const c = ch.toUpperCase().charCodeAt(0);
+      if (c < 65 || c > 90) continue;
+      n = n * 26 + (c - 64);
+    }
+    return n;
+  }
+
+  function colNumToLetters(n) {
+    let s = "";
+    let x = Number(n) || 0;
+    while (x > 0) {
+      const r = (x - 1) % 26;
+      s = String.fromCharCode(65 + r) + s;
+      x = Math.floor((x - 1) / 26);
+    }
+    return s || "A";
+  }
+
+  function xmlSheetBounds(xml) {
+    let maxR = 0;
+    let maxC = 0;
+    let m;
+    const rowRe = /<row r="(\d+)"/g;
+    while ((m = rowRe.exec(xml))) maxR = Math.max(maxR, Number(m[1]) || 0);
+    const refRe = /\b(?:r|ref)="([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?"/g;
+    while ((m = refRe.exec(xml))) {
+      maxC = Math.max(maxC, colLettersToNum(m[1]));
+      maxR = Math.max(maxR, Number(m[2]) || 0);
+      if (m[3]) {
+        maxC = Math.max(maxC, colLettersToNum(m[3]));
+        maxR = Math.max(maxR, Number(m[4]) || 0);
+      }
+    }
+    const colRe = /<col\b[^>]*\bmax="(\d+)"/g;
+    while ((m = colRe.exec(xml))) maxC = Math.max(maxC, Number(m[1]) || 0);
+    return { maxR, maxC };
+  }
+
+  function trimSheetXml(xml, bounds) {
+    const maxR = bounds && bounds.maxR;
+    const maxC = bounds && bounds.maxC;
+    if (!xml || !maxR) return xml;
+    let out = xml.replace(
+      /<row\b[^>]*\br="(\d+)"[^>]*>[\s\S]*?<\/row>/g,
+      (full, r) => (Number(r) > maxR ? "" : full)
+    );
+    if (maxC) {
+      out = out.replace(
+        /<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\s*\/>/g,
+        (full, c1, r1, c2, r2) => {
+          if (Number(r1) > maxR || Number(r2) > maxR) return "";
+          if (colLettersToNum(c1) > maxC || colLettersToNum(c2) > maxC) return "";
+          return full;
+        }
+      );
+    } else {
+      out = out.replace(
+        /<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\s*\/>/g,
+        (full, c1, r1, c2, r2) =>
+          Number(r1) > maxR || Number(r2) > maxR ? "" : full
+      );
+    }
+    const merges = out.match(/<mergeCell\b[^>]*\/>/g) || [];
+    if (/<mergeCells\b/.test(out)) {
+      if (!merges.length) {
+        out = out.replace(/<mergeCells\b[^>]*>[\s\S]*?<\/mergeCells>/, "");
+      } else {
+        out = out.replace(
+          /<mergeCells\b[^>]*>[\s\S]*?<\/mergeCells>/,
+          `<mergeCells count="${merges.length}">${merges.join("")}</mergeCells>`
+        );
+      }
+    }
+    const last = colNumToLetters(maxC || 1) + maxR;
+    if (/<dimension\b/.test(out)) {
+      out = out.replace(/<dimension\b[^>]*\/>/, `<dimension ref="A1:${last}"/>`);
+    } else {
+      out = out.replace(
+        /<sheetViews\b/,
+        `<dimension ref="A1:${last}"/><sheetViews`
+      );
+    }
+    return out;
+  }
+
+  function isHistoryEtalonName(name) {
+    const f = fold(name);
+    return f.includes("всесвітн") && f.includes("істор");
+  }
+
   function parseSubjectLine(line) {
     const t = String(line || "").replace(/\s+/g, " ").trim();
     if (!t) return null;
@@ -1991,7 +2084,6 @@
       throw new Error("Бібліотека JSZip не завантажилась.");
     }
     if (!makeState.buffer) throw new Error("Спочатку оберіть шаблон.");
-    const protoName = makeState.prototypeName;
     const zip = await JSZip.loadAsync(makeState.buffer);
     const wbXml = await zip.file("xl/workbook.xml").async("string");
     const relsXml = await zip.file("xl/_rels/workbook.xml.rels").async("string");
@@ -2004,20 +2096,47 @@
     rels.forEach((r) => {
       relById[r.id] = r;
     });
-    const proto = listed.find((s) => s.name === protoName);
+    let proto = listed.find((s) => s.name === makeState.prototypeName) || null;
+    let protoScore = Infinity;
+    for (const s of listed) {
+      if (isMetaSheet(s.name || "") || !relById[s.rId]) continue;
+      const t = String(relById[s.rId].target || "").replace(/^\/+/, "");
+      const p = t.startsWith("xl/") ? t : "xl/" + t;
+      const file = zip.file(p);
+      if (!file) continue;
+      const xml = await file.async("string");
+      const merges = Number((xml.match(/mergeCells count="(\d+)"/) || [])[1] || 0);
+      if (merges < 100) continue;
+      const score = (xml.match(/<v>/g) || []).length * 1000 + xml.length;
+      if (score < protoScore) {
+        protoScore = score;
+        proto = s;
+      }
+    }
     if (!proto || !relById[proto.rId]) {
       throw new Error("Не знайдено аркуш-зразок у шаблоні.");
     }
+    const protoName = proto.name;
+    makeState.prototypeName = protoName;
     const protoTarget = String(relById[proto.rId].target || "").replace(/^\/+/, "");
     const protoPath = protoTarget.startsWith("xl/")
       ? protoTarget
       : "xl/" + protoTarget;
-    const protoXml = await zip.file(protoPath).async("string");
+    let protoXml = await zip.file(protoPath).async("string");
     const protoRelsPath = protoPath
       .replace("worksheets/", "worksheets/_rels/")
       .replace(/\.xml$/, ".xml.rels");
     const protoRelsFile = zip.file(protoRelsPath);
     const protoRels = protoRelsFile ? await protoRelsFile.async("string") : "";
+
+    const etalon = listed.find((s) => isHistoryEtalonName(s.name || "")) || proto;
+    if (etalon && relById[etalon.rId]) {
+      const etTarget = String(relById[etalon.rId].target || "").replace(/^\/+/, "");
+      const etPath = etTarget.startsWith("xl/") ? etTarget : "xl/" + etTarget;
+      const etXml =
+        etalon.name === protoName ? protoXml : await zip.file(etPath).async("string");
+      protoXml = trimSheetXml(protoXml, xmlSheetBounds(etXml));
+    }
 
     const xlsxWb = XLSX.read(makeState.buffer, { type: "array", cellDates: true });
     const protoSheet = xlsxWb.Sheets[protoName];
@@ -2031,13 +2150,6 @@
       findLabelValueAddr(protoSheet, ["викладач"]) || "C2";
 
     const keep = listed.filter((s) => isMetaSheet(s.name || ""));
-    const front = [];
-    const back = [];
-    keep.forEach((s) => {
-      const t = fold(s.name || "");
-      if (t.includes("зведен") || t.includes("відомість")) back.push(s);
-      else front.push(s);
-    });
 
     const sstFile = zip.file("xl/sharedStrings.xml");
     const sst = createSharedStrings(
@@ -2064,7 +2176,7 @@
         patchTitle: fold(src.name || "").includes("титул"),
       });
     };
-    for (const s of front) await copyKept(s);
+    for (const s of keep) await copyKept(s);
     for (const sub of subjects) {
       let xml = protoXml;
       xml = setSheetCellXml(xml, discAddr, sub.subject, sst);
@@ -2078,7 +2190,6 @@
         patchTitle: false,
       });
     }
-    for (const s of back) await copyKept(s);
 
     const titleIdx = outSheets.findIndex((s) => s.patchTitle);
     if (titleIdx >= 0) {
