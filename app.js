@@ -1326,7 +1326,7 @@
 
   function renderReport(results) {
     lastResults = results || lastResults;
-    if (!lastResults || !lastResults.length) return;
+    if (!reportEl || !lastResults || !lastResults.length) return;
     reportEl.hidden = false;
     reportEl.innerHTML = "";
     for (const r of lastResults) {
@@ -1364,6 +1364,7 @@
   let lastResults = [];
 
   function processSheets(sheets, opts) {
+    if (!previewEl) return;
     const fileName = (opts && opts.fileName) || "";
     previewEl.innerHTML = "";
     const titleSheet = (sheets || []).find((s) =>
@@ -2143,38 +2144,44 @@ ${styles}
     }, 300);
   }
 
-  fileInput.addEventListener("change", () => {
-    const file = fileInput.files && fileInput.files[0];
-    if (file) handleFile(file).catch((err) => {
-      renderReport([{ ok: false, label: "Файл", reason: err.message }]);
+  if (fileInput) {
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (file) handleFile(file).catch((err) => {
+        renderReport([{ ok: false, label: "Файл", reason: err.message }]);
+      });
     });
-  });
+  }
 
-  ["dragenter", "dragover"].forEach((ev) => {
-    dropzone.addEventListener(ev, (e) => {
-      e.preventDefault();
-      dropzone.classList.add("dragover");
+  if (dropzone) {
+    ["dragenter", "dragover"].forEach((ev) => {
+      dropzone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        dropzone.classList.add("dragover");
+      });
     });
-  });
-  ["dragleave", "drop"].forEach((ev) => {
-    dropzone.addEventListener(ev, (e) => {
-      e.preventDefault();
-      dropzone.classList.remove("dragover");
+    ["dragleave", "drop"].forEach((ev) => {
+      dropzone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        dropzone.classList.remove("dragover");
+      });
     });
-  });
-  dropzone.addEventListener("drop", (e) => {
-    const file = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (file) handleFile(file).catch((err) => {
-      renderReport([{ ok: false, label: "Файл", reason: err.message }]);
+    dropzone.addEventListener("drop", (e) => {
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) handleFile(file).catch((err) => {
+        renderReport([{ ok: false, label: "Файл", reason: err.message }]);
+      });
     });
-  });
+  }
 
-  printBtn.addEventListener("click", () => openPrintView());
+  if (printBtn) printBtn.addEventListener("click", () => openPrintView());
   const detailChecks = document.getElementById("detail-checks");
   if (detailChecks) {
     detailChecks.addEventListener("change", () => renderReport(lastResults));
   }
-  window.addEventListener("beforeprint", () => fitPrintCells(previewEl));
+  window.addEventListener("beforeprint", () => {
+    if (previewEl) fitPrintCells(previewEl);
+  });
 
   if (csvInput) {
     csvInput.addEventListener("change", () => {

@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Зібрати журнал</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fragment+Mono:ital@0;1&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;0,6..72,700;1,6..72,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #1c1410;
+      --ink-soft: #5a4e43;
+      --paper: #f3ead8;
+      --paper-2: #e7dcc6;
+      --rule: #c9b89a;
+      --stamp: #b42318;
+      --stamp-dark: #8a1810;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font-family: "Newsreader", "Times New Roman", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 500px at 10% -10%, #fff6e6 0%, transparent 50%),
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 27px,
+          rgba(28, 20, 16, 0.035) 28px
+        ),
+        var(--paper);
+      min-height: 100vh;
+    }
+
+    .app-chrome { padding: 28px 28px 8px; }
+    .masthead {
+      max-width: 210mm;
+      margin: 0 auto 28px;
+      border-bottom: 3px solid var(--ink);
+      padding-bottom: 14px;
+    }
+    .masthead-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .nav-chip {
+      flex: 0 0 auto;
+      margin-top: 8px;
+      text-decoration: none;
+      border: 1.5px solid var(--ink);
+      color: var(--ink);
+      background: rgba(255,255,255,0.5);
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 9px 13px;
+      white-space: nowrap;
+    }
+    .nav-chip:hover { background: var(--ink); color: var(--paper); }
+    .nav-chip:active { transform: translateY(1px); }
+    h1 {
+      font-size: 34px;
+      line-height: 0.95;
+      margin: 0;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+    .masthead p {
+      margin: 8px 0 0;
+      color: var(--ink-soft);
+      font-size: 16px;
+    }
+    .stage {
+      max-width: 210mm;
+      margin: 0 auto 22px;
+      padding: 18px 20px 20px;
+      border: 1.5px solid var(--ink);
+      background: rgba(255,255,255,0.4);
+    }
+    .stage-num {
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin: 0 0 4px;
+    }
+    .stage h2 {
+      margin: 0 0 14px;
+      font-size: 22px;
+      letter-spacing: -0.02em;
+    }
+    .stamp-btn {
+      appearance: none;
+      border: 2px solid var(--stamp);
+      background: transparent;
+      color: var(--stamp);
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 12px 16px;
+      cursor: pointer;
+      transform: rotate(-2deg);
+    }
+    .stamp-btn:hover { background: var(--stamp); color: var(--paper); }
+    .dropzone {
+      max-width: 210mm;
+      margin: 0 auto 18px;
+      border: 1.5px dashed var(--ink);
+      background: rgba(255, 255, 255, 0.35);
+      padding: 22px 24px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+    }
+    .dropzone.dragover {
+      background: #fff;
+      box-shadow: inset 0 0 0 2px var(--ink);
+    }
+    .dropzone strong { font-size: 18px; }
+    .dropzone span {
+      display: block;
+      margin-top: 4px;
+      color: var(--ink-soft);
+      font-size: 15px;
+    }
+    .file-btn {
+      appearance: none;
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      color: var(--paper);
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 10px 14px;
+      cursor: pointer;
+    }
+    .file-btn:hover { background: transparent; color: var(--ink); }
+    .make-lead {
+      margin: 0 0 14px;
+      color: var(--ink-soft);
+      font-size: 15px;
+      line-height: 1.4;
+    }
+    .make-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 14px;
+      margin: 0 0 16px;
+    }
+    .make-field label,
+    .subj-head {
+      display: block;
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin: 0 0 4px;
+    }
+    .make-field input,
+    .subj-row input,
+    .make-paste {
+      width: 100%;
+      border: 1px solid var(--ink);
+      background: rgba(255,255,255,0.7);
+      color: var(--ink);
+      font: inherit;
+      font-size: 15px;
+      padding: 7px 8px;
+    }
+    .make-paste {
+      min-height: 72px;
+      resize: vertical;
+      margin: 0 0 8px;
+    }
+    .subj-list { display: grid; gap: 6px; margin: 0 0 10px; }
+    .subj-row {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .subj-remove {
+      appearance: none;
+      border: 1px solid var(--ink-soft);
+      background: transparent;
+      color: var(--ink-soft);
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+    .subj-remove:hover { border-color: var(--stamp); color: var(--stamp); }
+    .make-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin: 12px 0 8px;
+    }
+    .text-btn {
+      appearance: none;
+      border: 0;
+      background: none;
+      color: var(--ink-soft);
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      padding: 0;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    #make-status {
+      margin: 8px 0 0;
+      font-size: 14px;
+      color: var(--ink-soft);
+    }
+    #make-status.err { color: var(--stamp-dark); }
+    @media (max-width: 720px) {
+      .masthead-row { flex-direction: column; gap: 12px; }
+      .nav-chip { margin-top: 0; align-self: flex-start; }
+      .make-grid, .subj-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-chrome">
+    <header class="masthead">
+      <div class="masthead-row">
+        <div>
+          <h1>Зібрати журнал</h1>
+          <p>Порожній Excel з шаблону: група, предмети, викладачі.</p>
+        </div>
+        <a class="nav-chip" href="index.html">До друку</a>
+      </div>
+    </header>
+
+    <section class="stage" id="stage-make">
+      <p class="stage-num">Новий Excel</p>
+      <h2>Шаблон і список предметів</h2>
+      <p class="make-lead">Завантажте шаблон електронного журналу, вкажіть предмети й викладачів. Кожен предмет стане окремим аркушем з тією самою розміткою, що й порожня «Всесвітня історія».</p>
+      <div class="dropzone" id="make-drop">
+        <div>
+          <strong>Шаблон .xlsx</strong>
+          <span id="make-picked">Потрібен файл з аркушем-предметом (сітка студентів і тем).</span>
+        </div>
+        <label class="file-btn">
+          Обрати шаблон
+          <input type="file" id="make-input" accept=".xlsx,.xls" hidden>
+        </label>
+      </div>
+      <div id="make-form" hidden>
+        <div class="make-grid">
+          <div class="make-field">
+            <label for="make-group">Група</label>
+            <input id="make-group" type="text" autocomplete="off">
+          </div>
+          <div class="make-field">
+            <label for="make-course">Курс</label>
+            <input id="make-course" type="text" autocomplete="off">
+          </div>
+          <div class="make-field">
+            <label for="make-dept">Відділення</label>
+            <input id="make-dept" type="text" autocomplete="off">
+          </div>
+          <div class="make-field">
+            <label for="make-spec">Спеціальність</label>
+            <input id="make-spec" type="text" autocomplete="off">
+          </div>
+          <div class="make-field" style="grid-column: 1 / -1;">
+            <label for="make-period">Семестр / навчальний рік</label>
+            <input id="make-period" type="text" autocomplete="off">
+          </div>
+        </div>
+        <p class="subj-head">Предмети</p>
+        <div class="subj-list" id="subj-list"></div>
+        <textarea class="make-paste" id="subj-paste" placeholder="Або вставте список, по рядку: Українська мова — Петренко О.І."></textarea>
+        <div class="make-actions">
+          <button type="button" class="text-btn" id="subj-add">Додати предмет</button>
+          <button type="button" class="text-btn" id="subj-from-paste">Підставити зі списку</button>
+          <button type="button" class="stamp-btn" id="make-btn">Завантажити Excel</button>
+        </div>
+        <p id="make-status"></p>
+      </div>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
